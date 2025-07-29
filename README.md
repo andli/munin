@@ -1,6 +1,6 @@
 # 🐦‍⬛ Munin
 
-Munin helps you track time for different tasks during your work day. Each face represents a different activity — just flip the cube to start logging time for a specific task (ex. _"Product support"_, _"Emails"_, etc). Add labels to each side if you want.
+Munin helps you track time for different tasks during your work day. Each face represents a different activity — just flip the cube to start logging time for a specific task (ex. _"Product support"_, _"Emails"_, _"Coding"_ etc). Add labels to each side if you want.
 
 It’s 3D-printed, bluetooth connected, powered by a Seeed XIAO board, and designed to be **subscription-free and hackable**. 
 
