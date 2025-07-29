@@ -2,7 +2,7 @@
 
 Munin helps you track time for different tasks during your work day. Each face represents a different activity — just flip the cube to start logging time for a specific task (ex. _"Product support"_, _"Emails"_, etc). Add labels to each side if you want.
 
-It’s 3D-printed, powered by a Seeed XIAO board, and designed to be **subscription-free and hackable**. 
+It’s 3D-printed, bluetooth connected, powered by a Seeed XIAO board, and designed to be **subscription-free and hackable**. 
 
 Depending on usage, battery time should be 2-4 weeks.
 
@@ -27,7 +27,7 @@ The internal LED provides status feedback:
 Pairing is triggered when the USB-C connector side is UP and USB is connected.
 
 ## Software
-The Munin time tracker is paired via bluetooth and has a CLI based app that handles configuration and writes to a log file.
+The Munin time tracker has a CLI based app that handles connectivity, configuration and writes to a log file.
 
 ### Log file format
 /logs/
