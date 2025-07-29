@@ -4,7 +4,7 @@ Munin helps you track time for different tasks during your work day. Each face r
 
 It’s 3D-printed, bluetooth connected, powered by a Seeed XIAO board, and designed to be **subscription-free and hackable**. 
 
-Depending on usage, battery time should be 2-4 weeks.
+Depending on usage, battery time should be 2-8 weeks.
 
 ![Munin mockup](munin-mockup.png)
 
