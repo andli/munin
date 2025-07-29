@@ -8,7 +8,7 @@ The device consists of a 3d printed translucent enclosure, a single board for co
 
 - 3D-printed translucent enclosure (STL to come)
 - Seeed XIAO nRF52840 Sense — BLE + IMU + USB-C microcontroller
-- LiPo battery (3.7 V, 400–1000 mAh)
+- LiPo battery (3.7 V, EEMB 803030 with PCM)
 
 ### LED feedback
 The internal LED provides status feedback:
