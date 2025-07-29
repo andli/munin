@@ -7,7 +7,7 @@ It’s 3D-printed, powered by a Seeed XIAO board, and designed to be **subscript
 The device consists of a 3d printed translucent enclosure, a single board for control and connectivity, plus a battery.
 
 - 3D-printed translucent enclosure (STL to come)
-- [Seeed XIAO nRF54L15 Sense]([https://www.seeedstudio.com/XIAO-nRF52840-Sense-p-5201.html](https://www.seeedstudio.com/XIAO-nRF54L15-Sense-p-6494.html)) — BLE + IMU + USB-C microcontroller
+- [Seeed XIAO nRF54L15 Sense](https://www.seeedstudio.com/XIAO-nRF54L15-Sense-p-6494.html) — BLE + IMU + USB-C microcontroller
 - LiPo battery (3.7 V, 400–1000 mAh)
 
 ### LED feedback
