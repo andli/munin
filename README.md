@@ -15,6 +15,8 @@ The device consists of a 3d printed translucent enclosure, a single board for co
 - Seeed XIAO nRF52840 Sense — BLE + IMU + USB-C microcontroller
 - LiPo battery (3.7 V, EEMB 803030 with PCM)
 
+Total cost of components is something like 40€ at the moment. Could be lowered significantly but that would make assembly much more cumbersome.
+
 ### LED feedback
 The internal LED provides status feedback:
 
