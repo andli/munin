@@ -3,7 +3,7 @@
 Munin is a physical, dice-like Bluetooth time tracker. Each face represents a different activity — just flip the cube to start logging time.  
 It’s 3D-printed, powered by a Seeed XIAO board, and designed to be **subscription-free and hackable**.
 
-![Munin mockup](munin.png)
+![Munin mockup](munin-mockup.png)
 
 ## Hardware
 The device consists of a 3d printed translucent enclosure, a single board for control and connectivity, plus a battery.
