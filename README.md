@@ -27,7 +27,7 @@ The internal LED provides status feedback:
 Pairing is triggered when the USB-C connector side is UP and USB is connected.
 
 ## Software
-The Munin time tracker has a CLI based app that handles connectivity, configuration and writes to a log file.
+The Munin time tracker has, besides its own firmware, a CLI based app that handles connectivity, configuration and writes to a log file.
 
 ### Log file format
 /logs/
