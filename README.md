@@ -50,18 +50,3 @@ munin_events.log         # System, connection, and status events
 ### Configuration
 - Label and color for each side.
 - Time log file location
-
-
-## Event codes
-| Event Code         | Description                                      | Example Parameters                        |
-|--------------------|--------------------------------------------------|-------------------------------------------|
-| `BOOT`             | Device startup event                             | `reason=cold`, `firmware=1.2.0`           |
-| `BLE_CONNECTED`    | BLE connection established                       | `peer=MacBook-Pro`, `rssi=-58`            |
-| `BLE_DISCONNECTED` | BLE connection lost                              | `peer=MacBook-Pro`, `reason=timeout`      |
-| `BATTERY_WARNING`  | Battery voltage dropped below threshold          | `voltage=3.51V`                           |
-| `CHARGING_STARTED` | USB power detected; charging begins              | `source=usb`                              |
-| `CHARGING_ENDED`   | Charging finished or unplugged                   | `voltage=4.19V`                           |
-| `PAIRING_MODE`     | Device entered pairing mode                      | `method=face6_usb`, `timeout=30s`         |
-| `RESET_REQUESTED`  | Device reset or data wipe triggered              | `reason=imu_sequence`                     |
-| `ERROR`            | Any unexpected fault or assertion                | `code=IMU_FAIL`, `detail=timeout`         |
-| `INFO`             | Generic info message (e.g. log roll, sync ping)  | `msg=log_rotation`, `file=2025-07-29.log` |
