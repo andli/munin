@@ -2,7 +2,10 @@
 
 Munin helps you track time for different tasks during your work day. Each face represents a different activity — just flip the cube to start logging time for a specific task (ex. _"Product support"_, _"Emails"_, _"Coding"_ etc). Add labels to each side if you want.
 
-It’s 3D-printed, bluetooth connected, powered by a Seeed XIAO board, and designed to be **subscription-free and hackable**. 
+* 3D-printed
+* Bluetooth connected
+* Subscription-free
+* Hackable
 
 Depending on usage, battery time should be 2-8 weeks.
 
@@ -20,10 +23,10 @@ Total cost of components is something like 40€ at the moment. Could be lowered
 ### LED feedback
 The internal LED provides status feedback:
 
-- Face switch confirmation (short glow in configured color)
-- Low battery (pulsing red)
-- Bluetooth pairing mode
-- Charging (pulsing green) and fully charged (steady green)
+- :rainbow: Face switch confirmation (short glow in configured color)
+- :red_square: Low battery (pulsing red)
+- :green_square: Charging (pulsing green) and fully charged (steady green)
+- :blue_square: Bluetooth pairing mode
 
 ### Bluetooth pairing
 Pairing is triggered when the USB-C connector side is UP and USB is connected.
