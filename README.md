@@ -4,7 +4,7 @@ Munin helps you track time for different tasks during your work day. Each face r
 
 * 3D-printed
 * Bluetooth connected
-* Subscription-free
+* Subscription-free (unlike for example Timeular and EARLY)
 * Hackable
 
 Depending on usage, battery time should be 2-8 weeks.
