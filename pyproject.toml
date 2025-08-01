@@ -1,0 +1,21 @@
+[project]
+name = "munin-client"
+version = "0.1.0"
+description = "BLE-connected time-tracking client for Munin device"
+authors = [
+  { name="Andreas Limber" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "bleak>=0.21.0",
+    "pystray",
+    "pillow",
+    "loguru"
+]
+
+[project.scripts]
+munin-client = "munin_client.__main__:main"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
