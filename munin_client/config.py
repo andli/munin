@@ -16,7 +16,20 @@ class MuninConfig:
             "face_labels": {
                 "1": "Emails",
                 "2": "Coding", 
-                "3": "Meetings"
+                "3": "Meetings",
+                "4": "Planning",
+                "5": "Research",
+                "6": "Admin"
+            },
+            "activity_summary": {
+                "monthly_start_date": 1,  # Day of month to start monthly reports
+                "show_percentages": False,
+                "time_format": "hours"  # "auto", "seconds", "minutes", "hours"
+            },
+            "ui_preferences": {
+                "show_notifications": True,
+                "minimize_to_tray": True,
+                "auto_connect": True
             }
         }
         self._config = None
@@ -36,10 +49,32 @@ class MuninConfig:
                 with open(self.config_file, 'r') as f:
                     self._config = json.load(f)
                 logger.log_event("Configuration loaded")
+                
+                # Ensure all default face labels are present
+                self._ensure_all_face_labels()
+                
             except (FileNotFoundError, json.JSONDecodeError) as e:
                 logger.log_event(f"Error loading config: {e}, using defaults")
                 self._config = self.default_config.copy()
         return self._config
+    
+    def _ensure_all_face_labels(self):
+        """Ensure all face labels from default config are present"""
+        if "face_labels" not in self._config:
+            self._config["face_labels"] = {}
+        
+        default_face_labels = self.default_config["face_labels"]
+        config_updated = False
+        
+        for face_id, default_label in default_face_labels.items():
+            if face_id not in self._config["face_labels"]:
+                self._config["face_labels"][face_id] = default_label
+                config_updated = True
+        
+        # Save updated config if any labels were added
+        if config_updated:
+            self.save_config(self._config)
+            logger.log_event("Updated config with missing face labels")
     
     def save_config(self, config: Dict[str, Any]):
         """Save configuration to file"""
@@ -77,3 +112,42 @@ class MuninConfig:
         config["face_labels"][face_number] = label
         self.save_config(config)
         logger.log_event(f"Set face {face_number} label to: {label}")
+    
+    def get_face_label(self, face_number: int) -> str:
+        """Get label for a specific face number"""
+        face_labels = self.get_face_labels()
+        return face_labels.get(str(face_number), f"Face {face_number}")
+    
+    def get_activity_summary_config(self) -> Dict[str, Any]:
+        """Get activity summary configuration"""
+        config = self.load_config()
+        return config.get("activity_summary", self.default_config["activity_summary"])
+    
+    def set_activity_summary_config(self, **kwargs):
+        """Update activity summary configuration"""
+        config = self.load_config()
+        if "activity_summary" not in config:
+            config["activity_summary"] = self.default_config["activity_summary"].copy()
+        
+        for key, value in kwargs.items():
+            if key in self.default_config["activity_summary"]:
+                config["activity_summary"][key] = value
+        
+        self.save_config(config)
+        logger.log_event(f"Updated activity summary config: {kwargs}")
+    
+    def get_monthly_start_date(self) -> int:
+        """Get the day of month when monthly reports should start"""
+        summary_config = self.get_activity_summary_config()
+        return summary_config.get("monthly_start_date", 1)
+    
+    def set_monthly_start_date(self, day: int):
+        """Set the day of month when monthly reports should start (1-28)"""
+        if not 1 <= day <= 28:
+            raise ValueError("Monthly start date must be between 1 and 28")
+        self.set_activity_summary_config(monthly_start_date=day)
+    
+    def get_ui_preferences(self) -> Dict[str, Any]:
+        """Get UI preferences"""
+        config = self.load_config()
+        return config.get("ui_preferences", self.default_config["ui_preferences"])

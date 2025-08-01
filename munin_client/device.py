@@ -105,7 +105,14 @@ class MuninDevice(ABC):
         
         # Handle face switch events for time tracking
         if log_entry.event_type == 0x01:  # Face switch event
-            face_label = f"Face {log_entry.face_id}"
+            # Get face label from configuration
+            try:
+                from munin_client.config import MuninConfig
+                config = MuninConfig()
+                face_label = config.get_face_label(log_entry.face_id)
+            except Exception:
+                face_label = f"Face {log_entry.face_id}"
+            
             logger.log_face_change(log_entry.face_id, face_label)
         
         # TODO: Handle other event types (battery, boot, etc.) if needed

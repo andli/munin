@@ -84,48 +84,52 @@ def start_tray(enable_fake_device: bool = False):
         logger.log_event("Quitting application")
         shutdown_event.set()
         icon.stop()
-    
-    def configure_device_callback(*args):
-        logger.log_event("Configure Device clicked")
-        # TODO: Implement device configuration dialog
-        # For now, just scan and log available devices
-        def scan_devices():
-            async def do_scan():
-                devices = await ble_manager.scan_for_devices(5.0)
-                logger.log_event(f"Found {len(devices)} devices")
-                for name, addr, rssi in devices:
-                    logger.log_event(f"  {name} ({addr}) RSSI: {rssi}")
-            
-            asyncio.run(do_scan())
-        
-        # Run scan in background thread to avoid blocking UI
-        scan_thread = threading.Thread(target=scan_devices, daemon=True)
-        scan_thread.start()
 
-    def show_activity_summary(*args):
-        """Show activity summary in a dialog"""
-        try:
-            from munin_client.time_summary import TimeTrackingSummary
-            summary = TimeTrackingSummary()
-            summary_text = summary.get_summary_text(30)  # Last 30 days
-            
-            # For now, just log it - could be enhanced with a proper dialog
-            logger.log_event("Activity Summary requested")
-            print("\n" + summary_text + "\n")
-            
-            # Try to show in a simple dialog if tkinter is available
-            try:
-                import tkinter as tk
-                from tkinter import messagebox
-                root = tk.Tk()
-                root.withdraw()  # Hide the main window
-                messagebox.showinfo("Munin Activity Summary", summary_text)
-                root.destroy()
-            except ImportError:
-                logger.log_event("Activity summary displayed in console (tkinter not available)")
-        except Exception as e:
-            logger.log_event(f"Error showing activity summary: {e}")
+    def scan_devices():
+        async def do_scan():
+            devices = await ble_manager.scan_for_devices(5.0)
+            logger.log_event(f"Found {len(devices)} devices")
+            for name, addr, rssi in devices:
+                logger.log_event(f"  {name} ({addr}) RSSI: {rssi}")
+        
+        asyncio.run(do_scan())
     
+    def show_activity_summary(days=30):
+        """Show activity summary for the specified number of days."""
+        from munin_client.time_summary import get_summary_text
+        summary = get_summary_text(days)
+        logger.log_event(summary)
+
+    def show_monthly_summary(*args):
+        """Show monthly activity summary."""
+        from munin_client.time_summary import get_monthly_summary
+        from munin_client.config import MuninConfig
+        
+        config = MuninConfig()
+        start_date = config.get_monthly_start_date()
+        time_format = config.get_activity_summary_config().get('time_format', 'hours')
+        summary = get_monthly_summary(start_date, time_format)
+        logger.log_event(f"Monthly Activity Summary:\n{summary}")
+
+    def show_settings(*args):
+        """Show settings configuration dialog."""
+        # For now, just log available settings
+        from munin_client.config import MuninConfig
+        config = MuninConfig()
+        settings_info = [
+            "Current Settings:",
+            f"Monthly Start Date: {config.get_monthly_start_date()}",
+            f"Time Format: {config.get_activity_summary_config().get('time_format', 'hours')}",
+            "",
+            "Face Labels:"
+        ]
+        
+        for i in range(1, 7):
+            label = config.get_face_label(i)
+            settings_info.append(f"  Face {i}: {label}")
+        
+        logger.log_event("\n".join(settings_info))
+
     def get_status_text():
         """Get current connection status for menu"""
         if ble_manager.is_connected():
@@ -166,9 +170,8 @@ def start_tray(enable_fake_device: bool = False):
         
         menu_items.extend([
             Menu.SEPARATOR,
-            MenuItem("Activity Summary", show_activity_summary),
-            MenuItem("Open Logs", lambda *args: logger.log_event("TODO: Open Logs")),
-            MenuItem("Configure Device...", configure_device_callback),
+            MenuItem("Monthly Summary", show_monthly_summary),
+            MenuItem("Settings...", show_settings),
             Menu.SEPARATOR,
             MenuItem("Quit", quit_callback)
         ])
