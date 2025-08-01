@@ -34,6 +34,8 @@ Pairing is triggered when the USB-C connector side is UP and USB is connected.
 ## Software
 The Munin time tracker has, besides its own firmware, a systray client app that handles connectivity, configuration and writes to a log file. The app is based on python and `bleak` and will work on macOS, Windows and Linux. It will not require root and will probably be distributed using something like `pipx install munin-client`. We shall see.
 
+![Munin systray](systray_screenshot.png)
+
 ### Log file format
 These are mockups of how the logs will look (probably).
 
