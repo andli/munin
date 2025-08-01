@@ -2,6 +2,7 @@ import threading
 import asyncio
 import time
 import os
+import subprocess
 from pystray import Icon, MenuItem, Menu
 from PIL import Image
 from munin_client.logger import MuninLogger
@@ -23,6 +24,16 @@ def get_icon_image():
     icon_dir = os.path.dirname(__file__)
     icon_path = os.path.join(icon_dir, "munin_tray_icon.png")
     return Image.open(icon_path)
+
+def copy_to_clipboard(text):
+    """Copy text to system clipboard using pbcopy on macOS"""
+    try:
+        process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE)
+        process.communicate(input=text.encode('utf-8'))
+        return True
+    except Exception as e:
+        logger.log_event(f"Failed to copy to clipboard: {e}")
+        return False
     
 
 
@@ -109,11 +120,16 @@ def start_tray(enable_fake_device: bool = False):
         start_date = config.get_monthly_start_date()
         time_format = config.get_activity_summary_config().get('time_format', 'hours')
         summary = get_monthly_summary(start_date, time_format)
-        logger.log_event(f"Monthly Activity Summary:\n{summary}")
+        
+        # Copy summary to clipboard
+        if copy_to_clipboard(summary):
+            logger.log_event("Monthly summary copied to clipboard")
+        else:
+            logger.log_event("Failed to copy to clipboard - showing in log")
+            logger.log_event(f"Monthly Activity Summary:\n{summary}")
 
     def show_settings(*args):
-        """Show settings configuration dialog."""
-        # For now, just log available settings
+        """Show settings configuration."""
         from munin_client.config import MuninConfig
         config = MuninConfig()
         settings_info = [
@@ -128,7 +144,14 @@ def start_tray(enable_fake_device: bool = False):
             label = config.get_face_label(i)
             settings_info.append(f"  Face {i}: {label}")
         
-        logger.log_event("\n".join(settings_info))
+        settings_text = "\n".join(settings_info)
+        
+        # Copy settings to clipboard
+        if copy_to_clipboard(settings_text):
+            logger.log_event("Settings copied to clipboard")
+        else:
+            logger.log_event("Failed to copy to clipboard - showing in log")
+            logger.log_event(settings_text)
 
     def get_status_text():
         """Get current connection status for menu"""
@@ -170,7 +193,7 @@ def start_tray(enable_fake_device: bool = False):
         
         menu_items.extend([
             Menu.SEPARATOR,
-            MenuItem("Monthly Summary", show_monthly_summary),
+            MenuItem("Copy monthly summary", show_monthly_summary),
             MenuItem("Settings...", show_settings),
             Menu.SEPARATOR,
             MenuItem("Quit", quit_callback)
