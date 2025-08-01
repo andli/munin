@@ -31,13 +31,13 @@ Event types are represented as single-byte constants in the first field of the p
 
 | `event_type` | Name              | Description                                                |
 |--------------|-------------------|------------------------------------------------------------|
-| `0x01`       | Face Switch        | A new face is now facing up. `delta_ms = 0`                |
-| `0x02`       | Ongoing Log        | Time has elapsed on the same face                          |
-| `0x10`       | Boot               | Device powered on. Anchors device uptime                   |
-| `0x11`       | Shutdown           | Device is powering down (low battery or user-triggered)    |
-| `0x12`       | Low Battery        | Battery voltage below safe threshold                       |
-| `0x20`       | BLE Connect        | Client connected over BLE                                  |
-| `0x21`       | BLE Disconnect     | Client disconnected or timeout                             |
+| `0x01`       | Face Switch        | A new face is now facing up. `delta_ms = 0`               |
+| `0x02`       | Ongoing Log        | Time has elapsed on the same face                         |
+| `0x10`       | Boot               | Device powered on. Anchors device uptime. Will be rare.   |
+| `0x11`       | Shutdown           | Device is powering down (low battery or user-triggered)   |
+| `0x12`       | Low Battery        | Battery voltage below safe threshold                      |
+| `0x20`       | BLE Connect        | Client connected over BLE                                 |
+| `0x21`       | BLE Disconnect     | Client disconnected or timeout                            |
 
 > Future event types may be added. Clients should ignore unknown event types gracefully.
 

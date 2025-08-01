@@ -98,6 +98,16 @@ class MuninDevice(ABC):
     def get_device_info(self) -> Tuple[str, str]:
         """Get device name and address"""
         return (self.name, self.address)
+    
+    def _process_log_entry(self, log_entry: 'MuninLogEntry'):
+        """Process a received log entry (shared implementation)"""
+        logger.log_event(f"Processed log entry: type=0x{log_entry.event_type:02x}, face={log_entry.face_id}, session={log_entry.session_id}, delta={log_entry.delta_ms}ms")
+        
+        # TODO: Add proper log entry processing:
+        # - Save to database/file
+        # - Update UI/statistics  
+        # - Handle different event types (face change, battery, boot, etc.)
+        # - Reconstruct wall-clock timestamps using delta_ms
 
 class RealMuninDevice(MuninDevice):
     """Real Munin BLE device implementation"""
@@ -200,16 +210,6 @@ class RealMuninDevice(MuninDevice):
                 
         except Exception as e:
             logger.log_event(f"Error parsing log notification: {e}")
-    
-    def _process_log_entry(self, log_entry: MuninLogEntry):
-        """Process a received log entry immediately"""
-        logger.log_event(f"Received log entry: type=0x{log_entry.event_type:02x}, face={log_entry.face_id}, session={log_entry.session_id}")
-        
-        # TODO: Add proper log entry processing:
-        # - Save to database/file
-        # - Update UI/statistics  
-        # - Handle different event types (face change, battery, boot, etc.)
-        # - Reconstruct wall-clock timestamps using delta_ms
 
 class FakeMuninDevice(MuninDevice):
     """Fake Munin device for testing"""
@@ -221,6 +221,10 @@ class FakeMuninDevice(MuninDevice):
         self.face_configs: Dict[int, FaceConfig] = {}
         self.is_running = False
         self._simulation_task: Optional[asyncio.Task] = None
+        
+        # Protocol simulation state
+        self.device_uptime_ms = 0  # Device uptime in milliseconds
+        self.session_start_time = None  # When current session started
     
     async def connect(self) -> bool:
         """Connect to the fake device"""
@@ -276,31 +280,93 @@ class FakeMuninDevice(MuninDevice):
         
         return True
     
+    def _send_protocol_packet(self, event_type: int, delta_ms: int = 0):
+        """Generate and process a 7-byte Munin protocol packet internally"""
+        try:
+            # Create 7-byte packet: event_type, session_id, delta_ms (little-endian), face_id
+            packet = struct.pack('<BBIB', event_type, self.session_id, delta_ms, self.current_face)
+            
+            # Process packet internally (same as real device would via BLE notification)
+            log_entry = MuninLogEntry.from_packet(packet, datetime.now())
+            self._process_log_entry(log_entry)
+            
+            logger.log_event(f"Fake device sent packet: type=0x{event_type:02x}, session={self.session_id}, delta={delta_ms}, face={self.current_face}")
+        except Exception as e:
+            logger.log_event(f"Error sending fake protocol packet: {e}")
+    
+    def _get_session_delta_ms(self) -> int:
+        """Get milliseconds since current session started"""
+        if not self.session_start_time:
+            return 0
+        
+        from datetime import datetime
+        delta = datetime.now() - self.session_start_time
+        return int(delta.total_seconds() * 1000)
+    
     async def _simulate_device(self):
-        """Simulate device behavior"""
+        """Simulate device behavior with real Munin protocol"""
         import random
+        from datetime import datetime
         
         logger.log_event(f"Started fake Munin device simulation: {self.name}")
         
+        # Send BOOT event (0x10) to start simulation
+        self.device_uptime_ms = 0
+        self.session_start_time = datetime.now()
+        self._send_protocol_packet(0x10, 0)  # Boot event
+        
+        # Send initial face switch event (0x01)
+        self._send_protocol_packet(0x01, 0)  # Face switch with delta_ms = 0
+        
+        last_ongoing_log = datetime.now()
+        ongoing_log_interval = 10.0  # Send ongoing log every 10 seconds
+        
         while self.is_running and self.is_connected():
             try:
+                current_time = datetime.now()
+                
+                # Update device uptime
+                self.device_uptime_ms += 2000  # 2 seconds per cycle
+                
+                # Send ongoing log entries periodically (0x02)
+                if (current_time - last_ongoing_log).total_seconds() >= ongoing_log_interval:
+                    delta_ms = self._get_session_delta_ms()
+                    self._send_protocol_packet(0x02, delta_ms)  # Ongoing log
+                    last_ongoing_log = current_time
+                
                 # Simulate battery drain
-                if random.random() < 0.05:  # 5% chance per cycle
+                if random.random() < 0.02:  # 2% chance per cycle
+                    old_battery = self.battery_level
                     self.battery_level = max(0, self.battery_level - 1)
+                    
+                    # Send low battery warning at 15%
+                    if old_battery > 15 and self.battery_level <= 15:
+                        self._send_protocol_packet(0x12, self.device_uptime_ms)  # Low battery
                 
                 # Simulate face changes
-                if random.random() < 0.2:  # 20% chance per cycle
+                if random.random() < 0.1:  # 10% chance per cycle (more frequent for testing)
                     old_face = self.current_face
                     self.current_face = random.randint(1, 6)
                     if old_face != self.current_face:
+                        # Face changed - start new session
                         self.session_id = (self.session_id + 1) % 256
+                        self.session_start_time = datetime.now()
+                        
+                        # Send face switch event
+                        self._send_protocol_packet(0x01, 0)  # Face switch with delta_ms = 0
+                        
                         logger.log_event(f"Fake device face changed from {old_face} to {self.current_face}")
                 
                 await asyncio.sleep(2)  # Check every 2 seconds
+                
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.log_event(f"Error in fake device simulation: {e}")
                 break
+        
+        # Send shutdown event before stopping
+        if self.is_connected():
+            self._send_protocol_packet(0x11, self.device_uptime_ms)  # Shutdown event
         
         logger.log_event("Fake Munin device simulation stopped")

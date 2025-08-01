@@ -25,7 +25,7 @@ class BLEDeviceManager:
         self.BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb"
         self.BATTERY_LEVEL_CHAR_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
     
-    async def scan_for_devices(self, timeout: float = 10.0) -> List[Tuple[str, str, str]]:
+    async def scan_for_devices(self, timeout: float = 5.0) -> List[Tuple[str, str, str]]:
         """Scan for BLE devices and return list of (name, address, rssi)"""
         logger.log_event(f"Scanning for BLE devices for {timeout}s...")
         devices = []
@@ -56,7 +56,7 @@ class BLEDeviceManager:
     
     async def find_munin_devices(self) -> List[Tuple[str, str, str]]:
         """Find devices with 'Munin' in the name"""
-        all_devices = await self.scan_for_devices()
+        all_devices = await self.scan_for_devices(5.0)
         munin_devices = [
             (name, addr, rssi) for name, addr, rssi in all_devices 
             if 'munin' in name.lower()
