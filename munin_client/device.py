@@ -103,11 +103,12 @@ class MuninDevice(ABC):
         """Process a received log entry (shared implementation)"""
         logger.log_event(f"Processed log entry: type=0x{log_entry.event_type:02x}, face={log_entry.face_id}, session={log_entry.session_id}, delta={log_entry.delta_ms}ms")
         
-        # TODO: Add proper log entry processing:
-        # - Save to database/file
-        # - Update UI/statistics  
-        # - Handle different event types (face change, battery, boot, etc.)
-        # - Reconstruct wall-clock timestamps using delta_ms
+        # Handle face switch events for time tracking
+        if log_entry.event_type == 0x01:  # Face switch event
+            face_label = f"Face {log_entry.face_id}"
+            logger.log_face_change(log_entry.face_id, face_label)
+        
+        # TODO: Handle other event types (battery, boot, etc.) if needed
 
 class RealMuninDevice(MuninDevice):
     """Real Munin BLE device implementation"""

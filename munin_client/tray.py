@@ -101,6 +101,30 @@ def start_tray(enable_fake_device: bool = False):
         # Run scan in background thread to avoid blocking UI
         scan_thread = threading.Thread(target=scan_devices, daemon=True)
         scan_thread.start()
+
+    def show_activity_summary(*args):
+        """Show activity summary in a dialog"""
+        try:
+            from munin_client.time_summary import TimeTrackingSummary
+            summary = TimeTrackingSummary()
+            summary_text = summary.get_summary_text(30)  # Last 30 days
+            
+            # For now, just log it - could be enhanced with a proper dialog
+            logger.log_event("Activity Summary requested")
+            print("\n" + summary_text + "\n")
+            
+            # Try to show in a simple dialog if tkinter is available
+            try:
+                import tkinter as tk
+                from tkinter import messagebox
+                root = tk.Tk()
+                root.withdraw()  # Hide the main window
+                messagebox.showinfo("Munin Activity Summary", summary_text)
+                root.destroy()
+            except ImportError:
+                logger.log_event("Activity summary displayed in console (tkinter not available)")
+        except Exception as e:
+            logger.log_event(f"Error showing activity summary: {e}")
     
     def get_status_text():
         """Get current connection status for menu"""
@@ -142,6 +166,7 @@ def start_tray(enable_fake_device: bool = False):
         
         menu_items.extend([
             Menu.SEPARATOR,
+            MenuItem("Activity Summary", show_activity_summary),
             MenuItem("Open Logs", lambda *args: logger.log_event("TODO: Open Logs")),
             MenuItem("Configure Device...", configure_device_callback),
             Menu.SEPARATOR,
