@@ -55,3 +55,9 @@ munin_events.log         # System, connection, and status events
 ### Configuration
 - Label and color for each side.
 - Time log file location
+
+
+## Dev
+Test locally: 
+
+`pipx run --spec . munin-client`
