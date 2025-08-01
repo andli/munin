@@ -39,13 +39,15 @@ The Munin time tracker has, besides its own firmware, a systray client app that 
 ### Log file format
 These are mockups of how the logs will look (probably).
 
-/logs/
 munin_time_log.csv       # Primary tracked time
 ```
-timestamp_start,timestamp_end,duration_sec,activity_face,activity_label,notes
-2025-07-29T08:00:00Z,2025-07-29T09:30:00Z,5400,2,Coding,
-2025-07-29T09:30:00Z,2025-07-29T09:45:00Z,900,5,Coffee Break,
-2025-07-29T09:45:00Z,2025-07-29T10:15:00Z,1800,3,Emails
+timestamp,face_id,face_label,duration_s
+2025-08-01T10:00:44.957943,6,Emails,2
+2025-08-01T10:00:58.453851,1,Coding,6
+2025-08-01T10:01:24.482893,2,Emails,26
+2025-08-01T10:01:34.516895,5,Coding,8
+2025-08-01T10:02:16.564271,5,Meetings,22
+2025-08-01T10:10:32.221486,1,Software Development,0
 ```
 munin_events.log         # System, connection, and status events
 ```
