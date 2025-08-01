@@ -1,9 +1,9 @@
 import threading
 import asyncio
 import time
+import os
 from pystray import Icon, MenuItem, Menu
-from PIL import Image, ImageDraw
-import sys
+from PIL import Image
 from munin_client.logger import MuninLogger
 
 logger = MuninLogger()
@@ -11,12 +11,14 @@ logger = MuninLogger()
 # Global shutdown event
 shutdown_event = threading.Event()
 
-# Dummy image for tray icon
-def create_image():
-    image = Image.new('RGB', (64, 64), color=(0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    draw.rectangle((16, 16, 48, 48), fill=(255, 255, 255))
-    return image
+def get_icon_image():
+    
+    # Define icon paths relative to the package
+    icon_dir = os.path.dirname(__file__)
+    icon_path = os.path.join(icon_dir, "munin_tray_icon.png")
+    return Image.open(icon_path)
+    
+
 
 # Dummy BLE logic (to be replaced with actual BLE interface)
 def ble_worker():
@@ -38,7 +40,7 @@ def start_tray():
     
     icon = Icon(
         "Munin",
-        create_image(),
+        get_icon_image(),
         menu=Menu(
             MenuItem("Open Logs", lambda *args: logger.log_event("TODO: Open Logs")),
             MenuItem("Quit", quit_callback)
