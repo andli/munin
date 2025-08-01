@@ -19,7 +19,6 @@ class BLEDeviceManager:
         self.fake_device: Optional[FakeMuninDevice] = None
         if enable_fake_device:
             self.fake_device = FakeMuninDevice()
-            self.fake_device.is_running = True
             logger.log_event("Fake Munin device enabled for testing")
         
         # Standard BLE Battery Service UUID
@@ -48,7 +47,7 @@ class BLEDeviceManager:
             logger.log_event(f"Error scanning for devices: {e}")
         
         # Add fake device if enabled
-        if self.fake_device and self.fake_device.is_running:
+        if self.fake_device:
             fake_device_info = (self.fake_device.name, self.fake_device.address, "-30")
             devices.append(fake_device_info)
             logger.log_event(f"Added fake device to scan results: {self.fake_device.name}")
@@ -166,12 +165,6 @@ class BLEDeviceManager:
         if self.connected_device:
             return self.connected_device.get_device_info()
         return None
-    
-    async def read_log_entries(self):
-        """Read Munin log entries from connected device"""
-        if not self.connected_device:
-            return []
-        return await self.connected_device.read_log_entries()
     
     async def send_face_config(self, face_configs):
         """Send face configuration to connected device"""

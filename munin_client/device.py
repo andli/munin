@@ -87,11 +87,6 @@ class MuninDevice(ABC):
         pass
     
     @abstractmethod
-    async def read_log_entries(self) -> List[MuninLogEntry]:
-        """Read any pending log entries from device"""
-        pass
-    
-    @abstractmethod
     async def send_face_config(self, face_configs: List[FaceConfig]) -> bool:
         """Send face color configuration to device"""
         pass
@@ -110,7 +105,6 @@ class RealMuninDevice(MuninDevice):
     def __init__(self, name: str, address: str, client):
         super().__init__(name, address)
         self.client = client
-        self.log_entries_cache: List[MuninLogEntry] = []
     
     async def connect(self) -> bool:
         """Connect to the real device"""
@@ -162,21 +156,6 @@ class RealMuninDevice(MuninDevice):
             logger.log_event(f"Error reading battery from real device: {e}")
             return None
     
-    async def read_log_entries(self) -> List[MuninLogEntry]:
-        """Read log entries from real device"""
-        try:
-            if not self.is_connected():
-                return []
-            
-            # In a real implementation, this would read from the Munin log characteristic
-            # For now, return cached entries and clear them
-            entries = self.log_entries_cache.copy()
-            self.log_entries_cache.clear()
-            return entries
-        except Exception as e:
-            logger.log_event(f"Error reading log entries from real device: {e}")
-            return []
-    
     async def send_face_config(self, face_configs: List[FaceConfig]) -> bool:
         """Send face configuration to real device"""
         try:
@@ -215,10 +194,22 @@ class RealMuninDevice(MuninDevice):
         try:
             if len(data) == 7:  # Valid Munin log packet
                 log_entry = MuninLogEntry.from_packet(bytes(data), datetime.now())
-                self.log_entries_cache.append(log_entry)
-                logger.log_event(f"Received log entry: type={log_entry.event_type}, face={log_entry.face_id}")
+                
+                # Process log entry immediately - no caching needed
+                self._process_log_entry(log_entry)
+                
         except Exception as e:
             logger.log_event(f"Error parsing log notification: {e}")
+    
+    def _process_log_entry(self, log_entry: MuninLogEntry):
+        """Process a received log entry immediately"""
+        logger.log_event(f"Received log entry: type=0x{log_entry.event_type:02x}, face={log_entry.face_id}, session={log_entry.session_id}")
+        
+        # TODO: Add proper log entry processing:
+        # - Save to database/file
+        # - Update UI/statistics  
+        # - Handle different event types (face change, battery, boot, etc.)
+        # - Reconstruct wall-clock timestamps using delta_ms
 
 class FakeMuninDevice(MuninDevice):
     """Fake Munin device for testing"""
@@ -242,6 +233,8 @@ class FakeMuninDevice(MuninDevice):
             if not self.is_running:
                 self.is_running = True
                 self._simulation_task = asyncio.create_task(self._simulate_device())
+            else:
+                logger.log_event(f"Fake device {self.name} simulation already running")
             
             return True
         except Exception as e:
@@ -272,11 +265,6 @@ class FakeMuninDevice(MuninDevice):
             return self.battery_level
         return None
     
-    async def read_log_entries(self) -> List[MuninLogEntry]:
-        """Read log entries from fake device"""
-        # Fake device doesn't queue entries, they're generated in real-time
-        return []
-    
     async def send_face_config(self, face_configs: List[FaceConfig]) -> bool:
         """Send face configuration to fake device"""
         if not self.is_connected():
@@ -297,11 +285,11 @@ class FakeMuninDevice(MuninDevice):
         while self.is_running and self.is_connected():
             try:
                 # Simulate battery drain
-                if random.random() < 0.01:  # 1% chance per cycle
+                if random.random() < 0.05:  # 5% chance per cycle
                     self.battery_level = max(0, self.battery_level - 1)
                 
                 # Simulate face changes
-                if random.random() < 0.05:  # 5% chance per cycle
+                if random.random() < 0.2:  # 20% chance per cycle
                     old_face = self.current_face
                     self.current_face = random.randint(1, 6)
                     if old_face != self.current_face:
