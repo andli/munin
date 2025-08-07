@@ -67,3 +67,9 @@ munin_events.log         # System, connection, and status events
 Test locally: 
 
 `pipx run --spec . munin-client`
+
+### Arduino details
+https://wiki.seeedstudio.com/XIAO_BLE/
+https://forum.seeedstudio.com/t/xiao-sense-nrf52840-lets-get-to-the-bottom-of-this-mbed-vs-non-mbed-library-functionality-differences/276315
+https://forum.seeedstudio.com/t/xiao-ble-sense-cannot-communicate-with-imu-sensor/265629
+
