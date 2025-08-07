@@ -123,19 +123,34 @@ void scanI2C() {
   }
 }
 
+int getFace(const Vector3& accel) {
+  float ax = accel.x;
+  float ay = accel.y;
+  float az = accel.z;
+
+  float absX = fabs(ax);
+  float absY = fabs(ay);
+  float absZ = fabs(az);
+
+  // Determine dominant axis
+  if (absX > absY && absX > absZ) {
+    return ax > 0 ? 5 : 6;
+  } else if (absY > absX && absY > absZ) {
+    return ay > 0 ? 3 : 4;
+  } else {
+    return az > 0 ? 1 : 2;
+  }
+}
+
 void loop() {
   Vector3 a1(myIMU.readFloatAccelX(), myIMU.readFloatAccelY(), myIMU.readFloatAccelZ());
   Vector3 g1(myIMU.readFloatGyroX(), myIMU.readFloatGyroY(), myIMU.readFloatGyroZ());
 
   if (a1 != prevAccel) {
     //Accelerometer
-    Serial.print("\nAccelerometer [g]:\n");
-    Serial.print(" X1 = ");
-    Serial.print(a1.x, 4);
-    Serial.print(", Y1 = ");
-    Serial.print(a1.y, 4);
-    Serial.print(", Z1 = ");
-    Serial.println(a1.z, 4);
+    int currentFace = getFace(a1);
+    Serial.print("Upward face: ");
+    Serial.println(currentFace);
 
     prevAccel = a1;
   }
@@ -162,4 +177,3 @@ void loop() {
   */
   delay(2000);
 }
-
