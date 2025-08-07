@@ -1,0 +1,164 @@
+/*
+    Working example with: 
+    - Arduino 1.8.19
+    - Seeed Arduino LSM6DS3 library 2.0.3 (not 2.0.4)
+    - Board: Seeed nRF52 mbed-enabled Boards -> Seeed XIAO BLE Sense - nRF52840 (only available in Arduino IDE 1.x)
+*/
+
+#include "LSM6DS3.h"
+#include "Wire.h"
+
+class Vector3 {
+  public:
+    float x, y, z;
+
+    Vector3() : x(0), y(0), z(0) {}
+    Vector3(float x, float y, float z) : x(x), y(y), z(z) {}
+
+    // Vector addition
+    Vector3 operator+(const Vector3& other) const {
+      return Vector3(x + other.x, y + other.y, z + other.z);
+    }
+
+    // Vector subtraction
+    Vector3 operator-(const Vector3& other) const {
+      return Vector3(x - other.x, y - other.y, z - other.z);
+    }
+
+    // Scalar multiplication
+    Vector3 operator*(float scalar) const {
+      return Vector3(x * scalar, y * scalar, z * scalar);
+    }
+
+    // Comparison (approx)
+    bool operator==(const Vector3& other) const {
+      const float epsilon = 0.0001;
+      return fabs(x - other.x) < epsilon &&
+             fabs(y - other.y) < epsilon &&
+             fabs(z - other.z) < epsilon;
+    }
+
+    bool operator!=(const Vector3& other) const {
+      return !(*this == other);
+    }
+
+    // Vector magnitude
+    float magnitude() const {
+      return sqrt(x * x + y * y + z * z);
+    }
+
+    // Normalized vector
+    Vector3 normalized() const {
+      float mag = magnitude();
+      if (mag == 0.0f) return Vector3(0, 0, 0); // avoid division by zero
+      return *this * (1.0f / mag);
+    }
+
+    // Print vector
+    void print() const {
+      Serial.print("(");
+      Serial.print(x); Serial.print(", ");
+      Serial.print(y); Serial.print(", ");
+      Serial.print(z); Serial.println(")");
+    }
+};
+
+//Create a instance of class LSM6DS3
+LSM6DS3 myIMU(I2C_MODE, 0x6A);    //I2C device address 0x6A
+
+Vector3 prevAccel(NAN,NAN,NAN);
+Vector3 prevGyro(NAN,NAN,NAN);
+bool showI2Cerrors = false;
+
+void setup() {
+  Serial.begin(9600);
+  while (!Serial);
+
+  int beginResp = myIMU.begin();
+  if (beginResp != 0) {
+    Serial.print("Device error (code ");
+    Serial.print(beginResp);
+    Serial.println("). Running I2C scan...");
+
+    scanI2C();
+  } else {
+    Serial.println("Device OK!");
+  }
+}
+
+void scanI2C() {
+  Wire.begin();
+  Serial.println("Scanning I2C bus...");
+
+  int devicesFound = 0;
+  for (byte address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    byte error = Wire.endTransmission();
+
+    if (error == 0) {
+      Serial.print("I2C device found at 0x");
+      if (address < 16) Serial.print("0");
+      Serial.println(address, HEX);
+      devicesFound++;
+    } else if(showI2Cerrors) {
+      Serial.print("I2C error at 0x");
+      if (address < 16) Serial.print("0");
+      Serial.print(address, HEX);
+      Serial.print(": ");
+
+      switch (error) {
+        case 1: Serial.println("Data too long to fit in transmit buffer"); break;
+        case 2: Serial.println("Received NACK on transmit of address"); break;
+        case 3: Serial.println("Received NACK on transmit of data"); break;
+        case 4: Serial.println("Other error (bus busy, timeout, etc)"); break;
+        default: Serial.println("Unknown error"); break;
+      }
+    }
+  }
+
+  if (devicesFound == 0) {
+    Serial.println("No I2C devices found.");
+  } else {
+    Serial.println("I2C scan complete.");
+  }
+}
+
+void loop() {
+  Vector3 a1(myIMU.readFloatAccelX(), myIMU.readFloatAccelY(), myIMU.readFloatAccelZ());
+  Vector3 g1(myIMU.readFloatGyroX(), myIMU.readFloatGyroY(), myIMU.readFloatGyroZ());
+
+  if (a1 != prevAccel) {
+    //Accelerometer
+    Serial.print("\nAccelerometer:\n");
+    Serial.print(" X1 = ");
+    Serial.print(a1.x, 4);
+    Serial.print(", Y1 = ");
+    Serial.print(a1.y, 4);
+    Serial.print(", Z1 = ");
+    Serial.println(a1.z, 4);
+
+    prevAccel = a1;
+  }
+
+  if (g1 != prevGyro) {
+
+    //Gyroscope
+    Serial.print("\nGyroscope:\n");
+    Serial.print(" X1 = ");
+    Serial.print(g1.x, 4);
+    Serial.print(", Y1 = ");
+    Serial.print(g1.y, 4);
+    Serial.print(", Z1 = ");
+    Serial.println(g1.z, 4);
+
+    prevGyro = g1;
+  }
+  /*
+      //Thermometer
+      Serial.print("\nThermometer:\n");
+      Serial.print(" Degrees C1 = ");
+      Serial.println(myIMU.readTempC(), 4);
+  */
+  delay(2000);
+}
+
