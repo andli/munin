@@ -129,7 +129,7 @@ void loop() {
 
   if (a1 != prevAccel) {
     //Accelerometer
-    Serial.print("\nAccelerometer:\n");
+    Serial.print("\nAccelerometer [g]:\n");
     Serial.print(" X1 = ");
     Serial.print(a1.x, 4);
     Serial.print(", Y1 = ");
@@ -139,7 +139,7 @@ void loop() {
 
     prevAccel = a1;
   }
-
+/*
   if (g1 != prevGyro) {
 
     //Gyroscope
@@ -153,6 +153,7 @@ void loop() {
 
     prevGyro = g1;
   }
+  */
   /*
       //Thermometer
       Serial.print("\nThermometer:\n");
