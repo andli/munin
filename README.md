@@ -73,3 +73,13 @@ https://wiki.seeedstudio.com/XIAO_BLE/
 https://forum.seeedstudio.com/t/xiao-sense-nrf52840-lets-get-to-the-bottom-of-this-mbed-vs-non-mbed-library-functionality-differences/276315
 https://forum.seeedstudio.com/t/xiao-ble-sense-cannot-communicate-with-imu-sensor/265629
 
+# TODO
+## Client app
+* Test client app on Windows
+* Log face change to log file 
+## Munin device
+* Broadcast face change only on movement instead of every 1000 ms
+* Power saving mode - "sleep" and wake on movement
+* Broadcast battery level periodically
+* Receive LED configuration
+* Light up LED on face change 
