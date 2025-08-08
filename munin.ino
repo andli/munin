@@ -93,16 +93,25 @@ int getFace(const Vector3& accel) {
 }
 
 
-
-
 //Create a instance of class LSM6DS3
 LSM6DS3 myIMU(I2C_MODE, 0x6A);    //I2C device address 0x6A
 
 Vector3 prevAccel(NAN, NAN, NAN);
 Vector3 prevGyro(NAN, NAN, NAN);
 bool showI2Cerrors = false;
+
+// BLE Services and Characteristics
 BLEService faceService("6e400001-8a3a-11e5-8994-feff819cdc9f"); // custom service UUID
 BLEByteCharacteristic faceCharacteristic("6e400002-8a3a-11e5-8994-feff819cdc9f", BLERead | BLENotify); // custom characteristic UUID
+
+// Battery Service
+BLEService batteryService("180F"); // Standard Battery Service UUID
+BLEByteCharacteristic batteryLevelCharacteristic("2A19", BLERead | BLENotify); // Standard Battery Level UUID
+
+// Battery simulation variables
+unsigned long lastBatteryUpdate = 0;
+const unsigned long batteryUpdateInterval = 30000; // Update every 30 seconds
+int batteryLevel = 85; // Start at 85%
 
 void setup() {
   Serial.begin(9600);
@@ -128,21 +137,33 @@ void setup() {
   BLE.setLocalName("Munin-0001");
   BLE.setDeviceName("Munin-0001");
 
-  // Init characteristics with a value
+  // Init characteristics with values
   faceCharacteristic.writeValue(0);
+  batteryLevelCharacteristic.writeValue(batteryLevel);
   
+  // Add characteristics to services
   faceService.addCharacteristic(faceCharacteristic);
+  batteryService.addCharacteristic(batteryLevelCharacteristic);
+  
+  // Add services to BLE
   BLE.addService(faceService);
+  BLE.addService(batteryService);
   
   BLE.setAdvertisedService(faceService);
   BLE.advertise();
 
-  Serial.println("BLE advertising as Munin...");
+  Serial.println("BLE advertising as Munin with battery service...");
+  Serial.print("Initial battery level: ");
+  Serial.print(batteryLevel);
+  Serial.println("%");
 }
 
 void loop() {
   // keep BLE stack happy
   BLE.poll();
+  
+  // Update battery level periodically (simulate battery drain)
+  updateBatteryLevel();
   
   Vector3 a1(myIMU.readFloatAccelX(), myIMU.readFloatAccelY(), myIMU.readFloatAccelZ());
   Vector3 g1(myIMU.readFloatGyroX(), myIMU.readFloatGyroY(), myIMU.readFloatGyroZ());
@@ -158,11 +179,34 @@ void loop() {
     prevAccel = a1;
   }
 
-
-
   delay(1000);
 }
 
+void updateBatteryLevel() {
+  unsigned long currentTime = millis();
+  
+  // Update battery level every 30 seconds
+  if (currentTime - lastBatteryUpdate >= batteryUpdateInterval) {
+    // Simulate battery drain (decrease by 1% every 30 seconds for testing)
+    // In real implementation, you'd read from actual battery ADC
+    if (batteryLevel > 0) {
+      batteryLevel--;
+      batteryLevelCharacteristic.writeValue(batteryLevel);
+      
+      Serial.print("Battery level updated: ");
+      Serial.print(batteryLevel);
+      Serial.println("%");
+      
+      // Reset battery to 100% when it hits 0 (for demo purposes)
+      if (batteryLevel == 0) {
+        batteryLevel = 100;
+        Serial.println("Battery reset to 100% for demo");
+      }
+    }
+    
+    lastBatteryUpdate = currentTime;
+  }
+}
 
 void scanI2C() {
   Wire.begin();
