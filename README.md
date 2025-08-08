@@ -73,13 +73,28 @@ https://wiki.seeedstudio.com/XIAO_BLE/
 https://forum.seeedstudio.com/t/xiao-sense-nrf52840-lets-get-to-the-bottom-of-this-mbed-vs-non-mbed-library-functionality-differences/276315
 https://forum.seeedstudio.com/t/xiao-ble-sense-cannot-communicate-with-imu-sensor/265629
 
-# TODO
+# Roadmap
 ## Client app
 * Test client app on Windows
-* Log face change to log file 
+* Log face change to log file (CSV format as specified above)
+* Implement face color configuration UI in system tray
+* Handle device reconnection when connection is lost
+* Add preferred device selection/pairing UI
+* Implement a basic view for time tracking statistics and reports
+
 ## Munin device
 * Broadcast face change only on movement instead of every 1000 ms
 * Power saving mode - "sleep" and wake on movement
-* Broadcast battery level periodically
-* Receive LED configuration
-* Light up LED on face change 
+* Broadcast battery level periodically (currently simulated)
+* Receive LED configuration from client
+* Light up LED on face change
+* Implement real battery voltage reading (ADC)
+* Add charging status detection
+* Optimize BLE connection parameters for battery life
+
+## Protocol & Infrastructure
+* Finalize 7-byte Munin protocol implementation (currently partially implemented)
+* Add proper error handling for malformed packets
+* Implement device firmware update mechanism
+* Add data persistence/backup for logged time
+* Create proper installer/packaging for client app 
