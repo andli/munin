@@ -100,6 +100,13 @@ Vector3 prevAccel(NAN, NAN, NAN);
 Vector3 prevGyro(NAN, NAN, NAN);
 bool showI2Cerrors = false;
 
+// Face tracking
+int currentFace = 0;  // Track the current face
+int lastBroadcastFace = -1;  // Track the last face we broadcast
+int candidateFace = -1;  // Face that might become the new face
+unsigned long faceChangeTime = 0;  // When the candidate face was first detected
+const unsigned long FACE_SETTLE_TIME = 1000;  // Face must be stable for 1 second
+
 // BLE Services and Characteristics
 BLEService faceService("6e400001-8a3a-11e5-8994-feff819cdc9f"); // custom service UUID
 BLEByteCharacteristic faceCharacteristic("6e400002-8a3a-11e5-8994-feff819cdc9f", BLERead | BLENotify); // custom characteristic UUID
@@ -168,18 +175,26 @@ void loop() {
   Vector3 a1(myIMU.readFloatAccelX(), myIMU.readFloatAccelY(), myIMU.readFloatAccelZ());
   Vector3 g1(myIMU.readFloatGyroX(), myIMU.readFloatGyroY(), myIMU.readFloatGyroZ());
 
-  if (a1 != prevAccel) {
-    //Accelerometer
-    int currentFace = getFace(a1);
-    Serial.print("Upward face: ");
-    Serial.println(currentFace);
-
+  // Get the current face based on accelerometer
+  int detectedFace = getFace(a1);
+  unsigned long currentTime = millis();
+  
+  // Face settling logic with hysteresis
+  if (detectedFace != candidateFace) {
+    // New face detected, start the settling timer
+    candidateFace = detectedFace;
+    faceChangeTime = currentTime;
+  } else if (candidateFace != lastBroadcastFace && 
+             (currentTime - faceChangeTime) >= FACE_SETTLE_TIME) {
+    // Face has been stable for the required time, broadcast the change
+    Serial.print("Face settled and changed to: ");
+    Serial.println(candidateFace);
     
-    faceCharacteristic.writeValue((byte)currentFace);
-    prevAccel = a1;
+    faceCharacteristic.writeValue((byte)candidateFace);
+    lastBroadcastFace = candidateFace;
   }
 
-  delay(1000);
+  delay(100);  // Check more frequently but only broadcast on settled changes
 }
 
 void updateBatteryLevel() {
