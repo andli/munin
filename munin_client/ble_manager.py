@@ -30,8 +30,8 @@ class BLEDeviceManager:
         self.BATTERY_LEVEL_CHAR_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
     
     async def scan_for_devices(self, timeout: float = 5.0) -> List[Tuple[str, str, str]]:
-        """Scan for BLE devices and return list of (name, address, rssi)"""
-        logger.log_event(f"Scanning for BLE devices for {timeout}s...")
+        """Scan for BLE devices and return list of (name, address, rssi) for Munin devices only"""
+        logger.log_event(f"Scanning for Munin devices for {timeout}s...")
         devices = []
         
         try:
@@ -53,18 +53,11 @@ class BLEDeviceManager:
                 # Also check if device name contains "Munin" as fallback
                 is_munin_device = has_munin_service or 'munin' in name.lower()
                 
+                # Only add Munin devices to the list
                 if is_munin_device:
                     logger.log_event(f"Found Munin device: {name} ({address}) RSSI: {rssi} Service: {has_munin_service}")
                     devices.append((name, address, str(rssi) if rssi is not None else "Unknown"))
-                # Skip non-Munin devices with no RSSI (often cached/inactive devices)
-                elif rssi is None:
-                    # Skip silently - don't log unknown devices without RSSI
-                    continue
-                else:
-                    # Only log non-Unknown devices with RSSI
-                    if name != "Unknown":
-                        logger.log_event(f"Found device: {name} ({address}) RSSI: {rssi}")
-                    devices.append((name, address, str(rssi)))
+                
         except Exception as e:
             logger.log_event(f"Error scanning for devices: {e}")
         
@@ -74,26 +67,16 @@ class BLEDeviceManager:
             devices.append(fake_device_info)
             logger.log_event(f"Added fake device to scan results: {self.fake_device.name}")
         
-        logger.log_event(f"Final device list: {len(devices)} devices")
+        logger.log_event(f"Final device list: {len(devices)} Munin devices")
         return devices
     
     async def find_munin_devices(self) -> List[Tuple[str, str, str]]:
         """Find devices with Munin face service UUID or 'Munin' in the name"""
         all_devices = await self.scan_for_devices(5.0)
-        munin_devices = []
         
-        for name, addr, rssi in all_devices:
-            logger.log_event(f"Checking device: '{name}' for Munin match")
-            # The scan_for_devices already filtered for Munin devices,
-            # but we can do a double-check here based on name
-            if 'munin' in name.lower():
-                munin_devices.append((name, addr, rssi))
-                logger.log_event(f"  -> MATCH: {name}")
-            else:
-                logger.log_event(f"  -> No match for: {name}")
-        
-        logger.log_event(f"Found {len(munin_devices)} Munin devices")
-        return munin_devices
+        # scan_for_devices already filtered for Munin devices, so just return them
+        logger.log_event(f"Found {len(all_devices)} Munin devices")
+        return all_devices
     
     async def connect_to_preferred_device(self) -> bool:
         """Try to connect to the configured preferred device"""
