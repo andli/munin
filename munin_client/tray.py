@@ -217,16 +217,7 @@ def start_tray(enable_fake_device: bool = False):
             logger.log_event("Failed to copy to clipboard - showing in log")
             logger.log_event(settings_text)
 
-    def send_led_config(*args):
-        """Send LED configuration to connected device."""
-        async def do_send():
-            if ble_manager.is_connected():
-                await ble_manager._send_face_configuration()
-                logger.log_event("Manually sent LED configuration to device")
-            else:
-                logger.log_event("No device connected - cannot send LED configuration")
-        
-        asyncio.run(do_send())
+
 
     def get_status_text():
         """Get current connection status for menu"""
@@ -270,7 +261,6 @@ def start_tray(enable_fake_device: bool = False):
             Menu.SEPARATOR,
             MenuItem("Copy monthly summary", show_monthly_summary),
             MenuItem("Settings...", show_settings),
-            MenuItem("Send LED config", send_led_config),
             Menu.SEPARATOR,
             MenuItem("Quit", quit_callback)
         ])

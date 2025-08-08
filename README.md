@@ -85,12 +85,15 @@ https://forum.seeedstudio.com/t/xiao-ble-sense-cannot-communicate-with-imu-senso
 
 # Roadmap
 ## Client app
-* Test client app on Windows
 * ~~Log face change to log file (CSV format as specified above)~~ ✅
 * ~~Handle device reconnection when connection is lost~~ ✅
-* Implement face color configuration UI in system tray
-* Add preferred device selection/pairing UI
+* Implement a Settings UI in system tray for:
+    - LED colors
+    - Face labels
+    - preferred device selection/pairing
+* Test client app on Windows
 * Implement a basic view for time tracking statistics and reports
+* Add firmware update menu item and function
 
 ## Munin device
 * ~~Broadcast face change only on movement instead of every 1000 ms~~ ✅ 
@@ -105,8 +108,6 @@ https://forum.seeedstudio.com/t/xiao-ble-sense-cannot-communicate-with-imu-senso
 * Add on/off button?
 
 ## Protocol & Infrastructure
-* Finalize 7-byte Munin protocol implementation (currently partially implemented)
-* Add proper error handling for malformed packets
 * Implement device firmware update mechanism
 * Add data persistence/backup for logged time
 * Create proper installer/packaging for client app 
