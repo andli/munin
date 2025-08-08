@@ -68,7 +68,7 @@ class MuninDevice(ABC):
         # Munin-specific service UUIDs (matching Arduino code)
         self.MUNIN_SERVICE_UUID = "6e400001-8a3a-11e5-8994-feff819cdc9f"
         self.MUNIN_LOG_CHAR_UUID = "6e400002-8a3a-11e5-8994-feff819cdc9f"
-        self.MUNIN_CONFIG_CHAR_UUID = "11111111-2222-3333-4444-555555555555"
+        self.MUNIN_LED_CONFIG_CHAR_UUID = "6e400003-8a3a-11e5-8994-feff819cdc9f"
         
         # Standard BLE Battery Service
         self.BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb"
@@ -200,7 +200,7 @@ class RealMuninDevice(MuninDevice):
             # Send each face config as a 4-byte packet
             for config in face_configs:
                 packet = config.to_packet()
-                await self.client.write_gatt_char(self.MUNIN_CONFIG_CHAR_UUID, packet)
+                await self.client.write_gatt_char(self.MUNIN_LED_CONFIG_CHAR_UUID, packet)
                 logger.log_event(f"Sent face config for face {config.face_id}: RGB({config.r},{config.g},{config.b})")
             
             return True

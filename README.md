@@ -62,6 +62,16 @@ munin_events.log         # System, connection, and status events
 - Label and color for each side.
 - Time log file location
 
+Face colors can be configured in the `~/.munin/config.json` file. The client automatically sends the configured colors to the device when connecting. Each face has a default color:
+- Face 1: Red (255,0,0)
+- Face 2: Green (0,255,0) 
+- Face 3: Blue (0,0,255)
+- Face 4: Yellow (255,255,0)
+- Face 5: Magenta (255,0,255)
+- Face 6: Gray (128,128,128)
+
+The device will flash the configured color briefly when switching faces.
+
 
 ## Dev
 Test locally: 
@@ -85,12 +95,13 @@ https://forum.seeedstudio.com/t/xiao-ble-sense-cannot-communicate-with-imu-senso
 ## Munin device
 * ~~Broadcast face change only on movement instead of every 1000 ms~~ ✅ 
 * ~~Broadcast battery level periodically (currently simulated - reduce frequency)~~ ✅
+* ~~Receive LED configuration from client~~ ✅
+* ~~Light up LED on face change~~ ✅
 * Power saving mode - "sleep" and wake on movement
-* Receive LED configuration from client
-* Light up LED on face change
 * Optimize BLE connection parameters for battery life
 * Implement real battery voltage reading (ADC) - when hardware is ready
 * Add charging status detection - when hardware is ready
+* Stronger LED than the builtin one needed - add a WS2812B NeoPixel?
 
 ## Protocol & Infrastructure
 * Finalize 7-byte Munin protocol implementation (currently partially implemented)

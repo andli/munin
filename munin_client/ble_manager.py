@@ -110,6 +110,10 @@ class BLEDeviceManager:
                 if await self.fake_device.connect():
                     self.connected_device = self.fake_device
                     self.battery_level = await self.fake_device.read_battery_level()
+                    
+                    # Send face configuration after successful connection
+                    await self._send_face_configuration()
+                    
                     return True
                 return False
             
@@ -126,6 +130,10 @@ class BLEDeviceManager:
                 if await real_munin.connect():
                     self.connected_device = real_munin
                     self.battery_level = await real_munin.read_battery_level()
+                    
+                    # Send face configuration after successful connection
+                    await self._send_face_configuration()
+                    
                     return True
                 else:
                     await self.client.disconnect()
@@ -225,3 +233,32 @@ class BLEDeviceManager:
         if not self.connected_device:
             return False
         return await self.connected_device.send_face_config(face_configs)
+    
+    async def _send_face_configuration(self):
+        """Send face color configuration from config to device"""
+        try:
+            # Import FaceConfig here to avoid circular imports
+            from munin_client.device import FaceConfig
+            
+            face_configs = []
+            face_colors = self.config.get_face_colors()
+            
+            for face_id_str, color in face_colors.items():
+                face_id = int(face_id_str)
+                face_config = FaceConfig(
+                    face_id=face_id,
+                    r=color["r"],
+                    g=color["g"],
+                    b=color["b"]
+                )
+                face_configs.append(face_config)
+            
+            if face_configs:
+                success = await self.send_face_config(face_configs)
+                if success:
+                    logger.log_event(f"Sent face color configuration to device ({len(face_configs)} faces)")
+                else:
+                    logger.log_event("Failed to send face color configuration to device")
+            
+        except Exception as e:
+            logger.log_event(f"Error sending face configuration: {e}")

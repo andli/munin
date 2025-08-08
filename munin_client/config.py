@@ -21,6 +21,14 @@ class MuninConfig:
                 "5": "Break",
                 "6": "Off"
             },
+            "face_colors": {
+                "1": {"r": 255, "g": 0, "b": 0},      # Red
+                "2": {"r": 0, "g": 255, "b": 0},      # Green
+                "3": {"r": 0, "g": 0, "b": 255},      # Blue
+                "4": {"r": 255, "g": 255, "b": 0},    # Yellow
+                "5": {"r": 255, "g": 0, "b": 255},    # Magenta
+                "6": {"r": 128, "g": 128, "b": 128}   # Gray
+            },
             "activity_summary": {
                 "monthly_start_date": 1,  # Day of month to start monthly reports
                 "show_percentages": False,
@@ -71,10 +79,20 @@ class MuninConfig:
                 self._config["face_labels"][face_id] = default_label
                 config_updated = True
         
-        # Save updated config if any labels were added
+        # Also ensure face colors are present
+        if "face_colors" not in self._config:
+            self._config["face_colors"] = {}
+        
+        default_face_colors = self.default_config["face_colors"]
+        for face_id, default_color in default_face_colors.items():
+            if face_id not in self._config["face_colors"]:
+                self._config["face_colors"][face_id] = default_color
+                config_updated = True
+        
+        # Save updated config if any labels or colors were added
         if config_updated:
             self.save_config(self._config)
-            logger.log_event("Updated config with missing face labels")
+            logger.log_event("Updated config with missing face labels/colors")
     
     def save_config(self, config: Dict[str, Any]):
         """Save configuration to file"""
@@ -117,6 +135,26 @@ class MuninConfig:
         """Get label for a specific face number"""
         face_labels = self.get_face_labels()
         return face_labels.get(str(face_number), f"Face {face_number}")
+    
+    def get_face_colors(self) -> Dict[str, Dict[str, int]]:
+        """Get face colors configuration"""
+        config = self.load_config()
+        return config.get("face_colors", self.default_config["face_colors"])
+    
+    def get_face_color(self, face_number: int) -> Dict[str, int]:
+        """Get color for a specific face number"""
+        face_colors = self.get_face_colors()
+        default_color = {"r": 128, "g": 128, "b": 128}  # Gray default
+        return face_colors.get(str(face_number), default_color)
+    
+    def set_face_color(self, face_number: str, r: int, g: int, b: int):
+        """Set color for a specific face"""
+        config = self.load_config()
+        if "face_colors" not in config:
+            config["face_colors"] = {}
+        config["face_colors"][face_number] = {"r": r, "g": g, "b": b}
+        self.save_config(config)
+        logger.log_event(f"Set face {face_number} color to: RGB({r},{g},{b})")
     
     def get_activity_summary_config(self) -> Dict[str, Any]:
         """Get activity summary configuration"""
