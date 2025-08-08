@@ -18,8 +18,8 @@ class MuninConfig:
                 "2": "Coding", 
                 "3": "Meetings",
                 "4": "Planning",
-                "5": "Research",
-                "6": "Admin"
+                "5": "Break",
+                "6": "Off"
             },
             "activity_summary": {
                 "monthly_start_date": 1,  # Day of month to start monthly reports

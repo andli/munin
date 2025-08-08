@@ -138,19 +138,32 @@ class BLEDeviceManager:
             logger.log_event(f"Error connecting to {address}: {e}")
             return False
     
-    async def disconnect(self):
-        """Disconnect from current device"""
+    async def disconnect(self, is_temporary: bool = False):
+        """Disconnect from current device
+        
+        Args:
+            is_temporary: If True, this is a temporary disconnect (reconnection expected)
+        """
         try:
             if self.connected_device:
+                # Finalize time tracking session
+                if hasattr(self.connected_device, 'time_tracker'):
+                    self.connected_device.time_tracker.finalize_current_session(is_temporary)
+                
                 await self.connected_device.disconnect()
                 device_name = self.connected_device.name
-                self.connected_device = None
-                self.battery_level = None
-                logger.log_event(f"Disconnected from {device_name}")
+                
+                if not is_temporary:
+                    self.connected_device = None
+                    self.battery_level = None
+                    
+                logger.log_event(f"Disconnected from {device_name}" + 
+                               (" (temporary)" if is_temporary else ""))
             
             if self.client and self.client.is_connected:
                 await self.client.disconnect()
-                self.client = None
+                if not is_temporary:
+                    self.client = None
         except Exception as e:
             logger.log_event(f"Error disconnecting: {e}")
     
@@ -172,7 +185,34 @@ class BLEDeviceManager:
     
     def is_connected(self) -> bool:
         """Check if currently connected to a device"""
-        return self.connected_device is not None and self.connected_device.is_connected()
+        if self.connected_device is None:
+            return False
+        
+        # For real devices, also check the underlying BLE client
+        if hasattr(self.connected_device, 'client') and self.connected_device.client:
+            try:
+                return self.connected_device.client.is_connected and self.connected_device.is_connected()
+            except Exception:
+                return False
+        
+        return self.connected_device.is_connected()
+    
+    async def check_connection_health(self) -> bool:
+        """Perform a deeper connection health check"""
+        if not self.is_connected():
+            return False
+        
+        try:
+            # Try to read battery level as a connection test
+            # This will fail if the connection is actually dead
+            await self.connected_device.read_battery_level()
+            return True
+        except Exception as e:
+            logger.log_event(f"Connection health check failed: {e}")
+            # Mark device as disconnected
+            if self.connected_device:
+                self.connected_device.is_connected_flag = False
+            return False
     
     def get_connected_device_info(self) -> Optional[Tuple[str, str]]:
         """Get info about currently connected device"""

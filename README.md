@@ -76,14 +76,14 @@ https://forum.seeedstudio.com/t/xiao-ble-sense-cannot-communicate-with-imu-senso
 # Roadmap
 ## Client app
 * Test client app on Windows
-* Log face change to log file (CSV format as specified above)
+* ~~Log face change to log file (CSV format as specified above)~~ ✅
+* ~~Handle device reconnection when connection is lost~~ ✅
 * Implement face color configuration UI in system tray
-* Handle device reconnection when connection is lost
 * Add preferred device selection/pairing UI
 * Implement a basic view for time tracking statistics and reports
 
 ## Munin device
-* Broadcast face change only on movement instead of every 1000 ms
+* ~~Broadcast face change only on movement instead of every 1000 ms~~ ✅ 
 * Power saving mode - "sleep" and wake on movement
 * Broadcast battery level periodically (currently simulated)
 * Receive LED configuration from client

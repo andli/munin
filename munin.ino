@@ -163,6 +163,19 @@ void setup() {
   Serial.print("Initial battery level: ");
   Serial.print(batteryLevel);
   Serial.println("%");
+  
+  // Detect and set initial face after a short delay to let IMU stabilize
+  delay(100);
+  Vector3 initialAccel(myIMU.readFloatAccelX(), myIMU.readFloatAccelY(), myIMU.readFloatAccelZ());
+  currentFace = getFace(initialAccel);
+  candidateFace = currentFace;
+  lastBroadcastFace = currentFace;
+  faceChangeTime = millis();
+  
+  // Broadcast initial face
+  faceCharacteristic.writeValue((byte)currentFace);
+  Serial.print("Initial face detected: ");
+  Serial.println(currentFace);
 }
 
 void loop() {

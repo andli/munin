@@ -12,6 +12,7 @@ from typing import Optional, List, Tuple, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime
 from munin_client.logger import MuninLogger
+from munin_client.time_tracker import TimeTracker
 
 logger = MuninLogger()
 
@@ -61,6 +62,8 @@ class MuninDevice(ABC):
         self.address = address
         self.battery_level: Optional[int] = None
         self.is_connected_flag = False
+        self.time_tracker = TimeTracker()  # Add time tracker
+        self.is_reconnecting = False  # Track reconnection state
         
         # Munin-specific service UUIDs (matching Arduino code)
         self.MUNIN_SERVICE_UUID = "6e400001-8a3a-11e5-8994-feff819cdc9f"
@@ -105,7 +108,10 @@ class MuninDevice(ABC):
         
         # Handle face switch events for time tracking
         if log_entry.event_type == 0x01:  # Face switch event
-            # Get face label from configuration
+            # Log the face change to CSV
+            self.time_tracker.log_face_change(log_entry.face_id)
+            
+            # Also log to the regular logger for immediate feedback
             try:
                 from munin_client.config import MuninConfig
                 config = MuninConfig()
@@ -132,7 +138,13 @@ class RealMuninDevice(MuninDevice):
             
             if self.client.is_connected:
                 self.is_connected_flag = True
-                logger.log_event(f"Connected to real Munin device: {self.name}")
+                
+                # Check if this is a reconnection (time tracker has a current session)
+                if self.time_tracker.current_face is not None:
+                    self.is_reconnecting = True
+                    logger.log_event(f"Reconnected to real Munin device: {self.name}")
+                else:
+                    logger.log_event(f"Connected to real Munin device: {self.name}")
                 
                 # Subscribe to log notifications if available
                 await self._setup_log_notifications()
@@ -143,13 +155,18 @@ class RealMuninDevice(MuninDevice):
             logger.log_event(f"Error connecting to real device {self.name}: {e}")
             return False
     
-    async def disconnect(self):
+    async def disconnect(self, is_temporary: bool = False):
         """Disconnect from the real device"""
         try:
+            # Finalize current time tracking session
+            if not is_temporary:
+                self.time_tracker.finalize_current_session(is_temporary=False)
+            
             if self.client.is_connected:
                 await self.client.disconnect()
             self.is_connected_flag = False
-            logger.log_event(f"Disconnected from real Munin device: {self.name}")
+            logger.log_event(f"Disconnected from real Munin device: {self.name}" + 
+                           (" (temporary)" if is_temporary else ""))
         except Exception as e:
             logger.log_event(f"Error disconnecting from real device: {e}")
     
@@ -216,6 +233,32 @@ class RealMuninDevice(MuninDevice):
                 # Process log entry immediately - no caching needed
                 self._process_log_entry(log_entry)
                 
+            elif len(data) == 1:  # Simple face change (from Arduino)
+                face_id = int(data[0])
+                logger.log_event(f"Received face change notification: face {face_id}")
+                
+                # Check if this is a reconnection scenario
+                was_reconnecting = self.is_reconnecting
+                if self.is_reconnecting:
+                    # This is the first notification after reconnection
+                    self.time_tracker.resume_session_if_same_face(face_id)
+                    self.is_reconnecting = False
+                    logger.log_event(f"Resumed session after reconnection: face {face_id}")
+                else:
+                    # This is a normal face change
+                    self.time_tracker.log_face_change(face_id)
+                
+                # Also log to regular logger
+                try:
+                    from munin_client.config import MuninConfig
+                    config = MuninConfig()
+                    face_label = config.get_face_label(face_id)
+                except Exception:
+                    face_label = f"Face {face_id}"
+                
+                if not was_reconnecting:  # Don't double-log during reconnection
+                    logger.log_face_change(face_id, face_label)
+                
         except Exception as e:
             logger.log_event(f"Error parsing log notification: {e}")
 
@@ -239,7 +282,13 @@ class FakeMuninDevice(MuninDevice):
         try:
             self.is_connected_flag = True
             self.battery_level = 85  # Start with 85% battery
-            logger.log_event(f"Connected to fake Munin device: {self.name}")
+            
+            # Check if this is a reconnection (time tracker has a current session)
+            if self.time_tracker.current_face is not None:
+                self.is_reconnecting = True
+                logger.log_event(f"Reconnected to fake Munin device: {self.name}")
+            else:
+                logger.log_event(f"Connected to fake Munin device: {self.name}")
             
             # Start simulation
             if not self.is_running:
@@ -253,9 +302,13 @@ class FakeMuninDevice(MuninDevice):
             logger.log_event(f"Error connecting to fake device: {e}")
             return False
     
-    async def disconnect(self):
+    async def disconnect(self, is_temporary: bool = False):
         """Disconnect from the fake device"""
         try:
+            # Finalize current time tracking session
+            if not is_temporary:
+                self.time_tracker.finalize_current_session(is_temporary=False)
+            
             self.is_connected_flag = False
             self.is_running = False
             
@@ -267,7 +320,8 @@ class FakeMuninDevice(MuninDevice):
                     pass
                 self._simulation_task = None
             
-            logger.log_event(f"Disconnected from fake Munin device: {self.name}")
+            logger.log_event(f"Disconnected from fake Munin device: {self.name}" + 
+                           (" (temporary)" if is_temporary else ""))
         except Exception as e:
             logger.log_event(f"Error disconnecting from fake device: {e}")
     

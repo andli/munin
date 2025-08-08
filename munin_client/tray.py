@@ -41,35 +41,98 @@ def copy_to_clipboard(text):
 async def ble_worker_async():
     logger.log_event("Starting BLE worker")
     
-    # Try to connect to preferred device first, then auto-discover
+    # Connection state tracking
+    was_connected = False
+    reconnect_attempts = 0
+    max_reconnect_attempts = 5
+    
+    # Initial connection attempt
     connected = await ble_manager.connect_to_preferred_device()
     if not connected:
         connected = await ble_manager.auto_connect_to_munin()
     
     if not connected:
-        logger.log_event("No Munin device found - continuing without connection")
+        logger.log_event("No Munin device found - will keep trying to connect")
     
     # Main BLE loop
     battery_check_counter = 0
+    connection_check_counter = 0
+    
     while not shutdown_event.is_set():
-        if ble_manager.is_connected():
-            # Check battery every 30 seconds (30 * 1 second sleep)
-            if battery_check_counter >= 30:
-                await ble_manager.read_battery_level()
-                battery_check_counter = 0
+        try:
+            current_connected = ble_manager.is_connected()
             
-            battery_check_counter += 1
-            await asyncio.sleep(1)
-        else:
-            # Try to reconnect every 10 seconds
-            await asyncio.sleep(10)
-            if not shutdown_event.is_set():
-                logger.log_event("Attempting to reconnect...")
-                await ble_manager.auto_connect_to_munin()
-                battery_check_counter = 0
+            # Detect disconnection
+            if was_connected and not current_connected:
+                logger.log_event("Device disconnected - attempting to reconnect...")
+                reconnect_attempts = 0
+                was_connected = False
+            
+            if current_connected:
+                # Device is connected - normal operation
+                if not was_connected:
+                    logger.log_event("Device connected successfully")
+                    reconnect_attempts = 0
+                    was_connected = True
+                
+                # Check battery every 30 seconds
+                if battery_check_counter >= 30:
+                    await ble_manager.read_battery_level()
+                    battery_check_counter = 0
+                
+                # Perform connection health check every 10 seconds
+                if battery_check_counter % 10 == 0:
+                    if not await ble_manager.check_connection_health():
+                        logger.log_event("Connection health check failed")
+                        # Force disconnect and let reconnection logic handle it
+                        await ble_manager.disconnect(is_temporary=True)
+                        current_connected = False
+                        was_connected = False
+                
+                battery_check_counter += 1
+                connection_check_counter = 0
+                await asyncio.sleep(1)
+                
+            else:
+                # Device not connected - try to reconnect
+                connection_check_counter += 1
+                
+                # Try reconnection every 5 seconds, but with backoff
+                if connection_check_counter >= 5:
+                    if reconnect_attempts < max_reconnect_attempts:
+                        reconnect_attempts += 1
+                        logger.log_event(f"Reconnection attempt {reconnect_attempts}/{max_reconnect_attempts}")
+                        
+                        # Try preferred device first, then auto-discover
+                        connected = await ble_manager.connect_to_preferred_device()
+                        if not connected:
+                            connected = await ble_manager.auto_connect_to_munin()
+                            
+                        if connected:
+                            logger.log_event("Reconnection successful!")
+                        else:
+                            logger.log_event("Reconnection failed, will retry...")
+                            
+                    else:
+                        # Max attempts reached, wait longer before trying again
+                        logger.log_event(f"Max reconnection attempts reached, waiting 30 seconds...")
+                        await asyncio.sleep(25)  # Additional 25 + 5 below = 30 seconds
+                        reconnect_attempts = 0
+                    
+                    connection_check_counter = 0
+                
+                await asyncio.sleep(1)
+                
+        except Exception as e:
+            logger.log_event(f"Error in BLE worker: {e}")
+            await asyncio.sleep(5)
     
     # Cleanup
-    await ble_manager.disconnect()
+    try:
+        await ble_manager.disconnect()
+    except Exception as e:
+        logger.log_event(f"Error during cleanup: {e}")
+    
     logger.log_event("BLE worker shutting down")
 
 def ble_worker():
