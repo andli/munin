@@ -84,13 +84,13 @@ https://forum.seeedstudio.com/t/xiao-ble-sense-cannot-communicate-with-imu-senso
 
 ## Munin device
 * ~~Broadcast face change only on movement instead of every 1000 ms~~ ✅ 
+* ~~Broadcast battery level periodically (currently simulated - reduce frequency)~~ ✅
 * Power saving mode - "sleep" and wake on movement
-* Broadcast battery level periodically (currently simulated)
 * Receive LED configuration from client
 * Light up LED on face change
-* Implement real battery voltage reading (ADC)
-* Add charging status detection
 * Optimize BLE connection parameters for battery life
+* Implement real battery voltage reading (ADC) - when hardware is ready
+* Add charging status detection - when hardware is ready
 
 ## Protocol & Infrastructure
 * Finalize 7-byte Munin protocol implementation (currently partially implemented)
@@ -98,3 +98,4 @@ https://forum.seeedstudio.com/t/xiao-ble-sense-cannot-communicate-with-imu-senso
 * Implement device firmware update mechanism
 * Add data persistence/backup for logged time
 * Create proper installer/packaging for client app 
+* Write a manual

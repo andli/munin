@@ -117,7 +117,7 @@ BLEByteCharacteristic batteryLevelCharacteristic("2A19", BLERead | BLENotify); /
 
 // Battery simulation variables
 unsigned long lastBatteryUpdate = 0;
-const unsigned long batteryUpdateInterval = 30000; // Update every 30 seconds
+const unsigned long batteryUpdateInterval = 300000; // Update every 5 minutes (300 seconds)
 int batteryLevel = 85; // Start at 85%
 
 void setup() {
@@ -213,12 +213,17 @@ void loop() {
 void updateBatteryLevel() {
   unsigned long currentTime = millis();
   
-  // Update battery level every 30 seconds
+  // Update battery level every 5 minutes
   if (currentTime - lastBatteryUpdate >= batteryUpdateInterval) {
-    // Simulate battery drain (decrease by 1% every 30 seconds for testing)
-    // In real implementation, you'd read from actual battery ADC
-    if (batteryLevel > 0) {
+    // Simulate realistic battery drain - decrease by 1% every ~2 hours in simulation
+    // (every 24 updates = 24 * 5 minutes = 2 hours)
+    static int updateCounter = 0;
+    updateCounter++;
+    
+    if (updateCounter >= 24 && batteryLevel > 0) {
       batteryLevel--;
+      updateCounter = 0;
+      
       batteryLevelCharacteristic.writeValue(batteryLevel);
       
       Serial.print("Battery level updated: ");
@@ -230,6 +235,12 @@ void updateBatteryLevel() {
         batteryLevel = 100;
         Serial.println("Battery reset to 100% for demo");
       }
+    } else {
+      // Just broadcast current level without changing it
+      batteryLevelCharacteristic.writeValue(batteryLevel);
+      Serial.print("Battery level broadcast: ");
+      Serial.print(batteryLevel);
+      Serial.println("%");
     }
     
     lastBatteryUpdate = currentTime;
