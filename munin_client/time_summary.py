@@ -145,7 +145,8 @@ class TimeTrackingSummary:
         lines = [f"Activity Summary ({period_desc}):"]
         lines.append("-" * 40)
         
-        total_time = sum(activities.values())
+        # Calculate total excluding "Off" time (inactive/non-working time)
+        total_time = sum(duration for activity, duration in activities.items() if activity != "Off")
         
         for activity, duration in sorted_activities:
             formatted_duration = self.format_duration(duration, time_format)

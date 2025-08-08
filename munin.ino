@@ -3,7 +3,9 @@
     - Arduino 1.8.19
     - Seeed Arduino LSM6DS3 library 2.0.3 (not 2.0.4)
     - Board: Seeed nRF52 mbed-enabled Boards -> Seeed XIAO BLE Sense - nRF52840 (only available in Arduino IDE 1.x)
-    - ArduinoBLE 1.4.1
+        Serial.print("Face switch to ");
+    Serial.print(face);
+    Serial.println();uinoBLE 1.4.1
 */
 
 #include "LSM6DS3.h"
@@ -110,9 +112,14 @@ int candidateFace = -1;  // Face that might become the new face
 unsigned long faceChangeTime = 0;  // When the candidate face was first detected
 const unsigned long FACE_SETTLE_TIME = 1000;  // Face must be stable for 1 second
 
+// 6-byte protocol tracking (removed session concept)
+unsigned long sessionStartTime = 0;  // When current face started (millis)
+bool pendingStateSync = false;  // Flag for pending state sync after connection
+unsigned long stateSyncTime = 0;  // When to send state sync
+
 // BLE Services and Characteristics
 BLEService faceService("6e400001-8a3a-11e5-8994-feff819cdc9f"); // custom service UUID
-BLEByteCharacteristic faceCharacteristic("6e400002-8a3a-11e5-8994-feff819cdc9f", BLERead | BLENotify); // custom characteristic UUID
+BLECharacteristic faceCharacteristic("6e400002-8a3a-11e5-8994-feff819cdc9f", BLERead | BLENotify, 6); // custom characteristic UUID (6 bytes for protocol packet)
 BLECharacteristic ledConfigCharacteristic("6e400003-8a3a-11e5-8994-feff819cdc9f", BLEWrite, 4); // LED config characteristic (4 bytes per face)
 
 // Battery Service
@@ -184,9 +191,6 @@ void showFaceColor(int faceId) {
   if (faceId >= 1 && faceId <= 6) {
     FaceColor color = faceColors[faceId];
     setLEDColor(color.r, color.g, color.b);
-    
-    Serial.print("LED: Face ");
-    Serial.println(faceId);
   }
 }
 
@@ -195,6 +199,42 @@ void flashFaceColor(int faceId, int duration_ms = 500) {
   showFaceColor(faceId);
   delay(duration_ms);
   setLEDColor(0, 0, 0); // Turn off
+}
+
+void sendMuninProtocolPacket(uint8_t eventType, uint32_t deltaS, uint8_t faceId) {
+  // Create 6-byte Munin protocol packet: event_type, delta_s (little-endian), face_id
+  uint8_t packet[6];
+  packet[0] = eventType;
+  packet[1] = deltaS & 0xFF;         // delta_s low byte
+  packet[2] = (deltaS >> 8) & 0xFF;  // delta_s byte 2
+  packet[3] = (deltaS >> 16) & 0xFF; // delta_s byte 3
+  packet[4] = (deltaS >> 24) & 0xFF; // delta_s high byte
+  packet[5] = faceId;
+  
+  // Debug: print packet bytes
+  /*
+  Serial.print("Sending packet: ");
+  for (int i = 0; i < 6; i++) {
+    if (packet[i] < 16) Serial.print("0");
+    Serial.print(packet[i], HEX);
+  }
+  Serial.println();
+  */
+  
+  // Send as notification
+  faceCharacteristic.writeValue(packet, 6);
+  
+  // Log different event types appropriately
+  if (eventType == 0x01) {
+    Serial.print("Face switch to ");
+    Serial.println(faceId);
+  } else if (eventType == 0x03) {
+    Serial.print("State sync: face ");
+    Serial.print(faceId);
+    Serial.print(" active for ");
+    Serial.print(deltaS);
+    Serial.println("s");
+  }
 }
 
 void onLedConfigReceived(BLEDevice central, BLECharacteristic characteristic) {
@@ -211,13 +251,24 @@ void onLedConfigReceived(BLEDevice central, BLECharacteristic characteristic) {
       faceColors[faceId].g = g;
       faceColors[faceId].b = b;
       
-      Serial.print("LED config updated for face ");
-      Serial.println(faceId);
-      
       // Flash the new color briefly to confirm
       flashFaceColor(faceId, 300);
     }
   }
+}
+
+void onBLEConnected(BLEDevice central) {
+  Serial.print("BLE client connected: ");
+  Serial.println(central.address());
+  
+  // Schedule state sync to be sent after a delay to ensure client is ready
+  pendingStateSync = true;
+  stateSyncTime = millis() + 3000;  // 3 second delay to ensure client notifications are set up
+}
+
+void onBLEDisconnected(BLEDevice central) {
+  Serial.print("BLE client disconnected: ");
+  Serial.println(central.address());
 }
 
 void setup() {
@@ -247,12 +298,15 @@ void setup() {
   BLE.setLocalName("Munin-0001");
   BLE.setDeviceName("Munin-0001");
 
-  // Init characteristics with values
-  faceCharacteristic.writeValue(0);
+  // Initialize battery level
   batteryLevelCharacteristic.writeValue(batteryLevel);
   
   // Set up LED config characteristic callback
   ledConfigCharacteristic.setEventHandler(BLEWritten, onLedConfigReceived);
+  
+  // Set up BLE connection event handlers
+  BLE.setEventHandler(BLEConnected, onBLEConnected);
+  BLE.setEventHandler(BLEDisconnected, onBLEDisconnected);
   
   // Add characteristics to services
   faceService.addCharacteristic(faceCharacteristic);
@@ -279,8 +333,9 @@ void setup() {
   lastBroadcastFace = currentFace;
   faceChangeTime = millis();
   
-  // Broadcast initial face
-  faceCharacteristic.writeValue((byte)currentFace);
+  // Initialize session tracking
+  sessionStartTime = millis();
+  
   Serial.print("Initial face detected: ");
   Serial.println(currentFace);
   
@@ -291,6 +346,16 @@ void setup() {
 void loop() {
   // keep BLE stack happy
   BLE.poll();
+  
+  // Check for pending state sync
+  unsigned long checkTime = millis();
+  if (pendingStateSync && checkTime >= stateSyncTime) {
+    // Send current device state to newly connected client using state sync event type
+    uint32_t deltaS = (checkTime - sessionStartTime) / 1000;
+    sendMuninProtocolPacket(0x03, deltaS, lastBroadcastFace);  // 0x03 = State Sync
+    
+    pendingStateSync = false;  // Clear the flag
+  }
   
   // Update battery level periodically (simulate battery drain)
   updateBatteryLevel();
@@ -313,7 +378,12 @@ void loop() {
     Serial.print("Face settled and changed to: ");
     Serial.println(candidateFace);
     
-    faceCharacteristic.writeValue((byte)candidateFace);
+    // Reset session start time
+    sessionStartTime = currentTime;
+    
+    // Send face switch as 6-byte protocol packet (event 0x01, delta 0)
+    sendMuninProtocolPacket(0x01, 0, candidateFace);
+    
     lastBroadcastFace = candidateFace;
     
     // Flash LED to show face change

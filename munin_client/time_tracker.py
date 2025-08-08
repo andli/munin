@@ -93,21 +93,44 @@ class TimeTracker:
             if is_temporary:
                 # Keep tracking state for reconnection, but update start time
                 self.current_face_start_time = current_time
-                logger.log_event(f"Temporarily finalized session for face {self.current_face}")
+                logger.log_event(f"Temporarily finalized session for face {self.current_face}", "debug")
             else:
                 # Reset tracking completely
                 self.current_face = None
                 self.current_face_start_time = None
-                logger.log_event("Finalized current time tracking session")
+                logger.log_event("Finalized current time tracking session", "debug")
     
     def resume_session_if_same_face(self, face_id: int):
         """Resume session if reconnecting to the same face"""
         if self.current_face == face_id and self.current_face_start_time is not None:
             # Continue with the same face, just update start time to now
-            logger.log_event(f"Resumed tracking for face {face_id} after reconnection")
+            logger.log_event(f"Resumed tracking for face {face_id} after reconnection", "debug")
         else:
             # Different face or no previous session, start fresh
             self.log_face_change(face_id)
+    
+    def sync_current_face(self, face_id: int, elapsed_seconds: int):
+        """Sync with device state - face was already active for elapsed_seconds"""
+        current_time = datetime.now()
+        
+        # Calculate when this face session actually started
+        from datetime import timedelta
+        actual_start_time = current_time - timedelta(seconds=elapsed_seconds)
+        
+        # If we have a different current face, finalize it first
+        if self.current_face is not None and self.current_face != face_id:
+            # Calculate duration up to when the device switched (not now)
+            if self.current_face_start_time is not None:
+                duration = (actual_start_time - self.current_face_start_time).total_seconds()
+                if duration > 0:  # Only log if positive duration
+                    self._write_csv_entry(self.current_face_start_time, self.current_face, duration)
+        
+        # Set current face state to match device
+        self.current_face = face_id
+        self.current_face_start_time = actual_start_time
+        
+        face_label = self.config.get_face_label(face_id)
+        logger.log_event(f"Synced with device: face {face_id} ({face_label}) active for {elapsed_seconds}s")
     
     def get_csv_file_path(self) -> str:
         """Get the current CSV file path"""

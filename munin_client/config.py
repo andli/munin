@@ -56,7 +56,7 @@ class MuninConfig:
             try:
                 with open(self.config_file, 'r') as f:
                     self._config = json.load(f)
-                logger.log_event("Configuration loaded")
+                logger.log_event("Configuration loaded", "debug")
                 
                 # Ensure all default face labels are present
                 self._ensure_all_face_labels()

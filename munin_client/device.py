@@ -20,24 +20,22 @@ logger = MuninLogger()
 class MuninLogEntry:
     """Represents a Munin time tracking log entry"""
     event_type: int
-    session_id: int
-    delta_ms: int
+    delta_s: int
     face_id: int
     timestamp: datetime
     
     @classmethod
     def from_packet(cls, packet_data: bytes, arrival_time: datetime) -> 'MuninLogEntry':
-        """Parse a 7-byte Munin log packet"""
-        if len(packet_data) != 7:
-            raise ValueError(f"Invalid packet length: {len(packet_data)} (expected 7)")
+        """Parse a 6-byte Munin log packet"""
+        if len(packet_data) != 6:
+            raise ValueError(f"Invalid packet length: {len(packet_data)} (expected 6)")
         
-        # Unpack the 7-byte packet: uint8, uint8, uint32 (little-endian), uint8
-        event_type, session_id, delta_ms, face_id = struct.unpack('<BBIB', packet_data)
+        # Unpack the 6-byte packet: uint8, uint32 (little-endian), uint8
+        event_type, delta_s, face_id = struct.unpack('<BIB', packet_data)
         
         return cls(
             event_type=event_type,
-            session_id=session_id,
-            delta_ms=delta_ms,
+            delta_s=delta_s,
             face_id=face_id,
             timestamp=arrival_time
         )
@@ -104,11 +102,10 @@ class MuninDevice(ABC):
     
     def _process_log_entry(self, log_entry: 'MuninLogEntry'):
         """Process a received log entry (shared implementation)"""
-        logger.log_event(f"Processed log entry: type=0x{log_entry.event_type:02x}, face={log_entry.face_id}, session={log_entry.session_id}, delta={log_entry.delta_ms}ms")
+        logger.log_event(f"Processed log entry: type=0x{log_entry.event_type:02x}, face={log_entry.face_id}, delta={log_entry.delta_s}s", "debug")
         
         # Handle face switch events for time tracking
-        if log_entry.event_type == 0x01:  # Face switch event
-            # Log the face change to CSV
+        if log_entry.event_type == 0x01:  # Face switch event (always delta=0 now)
             self.time_tracker.log_face_change(log_entry.face_id)
             
             # Also log to the regular logger for immediate feedback
@@ -120,6 +117,12 @@ class MuninDevice(ABC):
                 face_label = f"Face {log_entry.face_id}"
             
             logger.log_face_change(log_entry.face_id, face_label)
+            
+        elif log_entry.event_type == 0x03:  # State sync event
+            # This is a connection state sync - the device was already on this face
+            logger.log_event(f"Connection state sync: face {log_entry.face_id} active for {log_entry.delta_s}s")
+            # Don't log as a new face change, just update tracking state
+            self.time_tracker.sync_current_face(log_entry.face_id, log_entry.delta_s)
         
         # TODO: Handle other event types (battery, boot, etc.) if needed
 
@@ -201,7 +204,7 @@ class RealMuninDevice(MuninDevice):
             for config in face_configs:
                 packet = config.to_packet()
                 await self.client.write_gatt_char(self.MUNIN_LED_CONFIG_CHAR_UUID, packet)
-                logger.log_event(f"Sent face config for face {config.face_id}: RGB({config.r},{config.g},{config.b})")
+                #logger.log_event(f"Sent face config for face {config.face_id}: RGB({config.r},{config.g},{config.b})")
             
             return True
         except Exception as e:
@@ -227,7 +230,9 @@ class RealMuninDevice(MuninDevice):
     def _log_notification_handler(self, sender, data: bytearray):
         """Handle incoming log notifications"""
         try:
-            if len(data) == 7:  # Valid Munin log packet
+            logger.log_event(f"Received BLE notification: {len(data)} bytes: {data.hex()}", "debug")
+            
+            if len(data) == 6:  # Valid Munin log packet (now 6 bytes without session)
                 log_entry = MuninLogEntry.from_packet(bytes(data), datetime.now())
                 
                 # Process log entry immediately - no caching needed
@@ -235,7 +240,7 @@ class RealMuninDevice(MuninDevice):
                 
             elif len(data) == 1:  # Simple face change (from Arduino)
                 face_id = int(data[0])
-                logger.log_event(f"Received face change notification: face {face_id}")
+                logger.log_event(f"Received face change notification: face {face_id}", "debug")
                 
                 # Check if this is a reconnection scenario
                 was_reconnecting = self.is_reconnecting
@@ -243,7 +248,7 @@ class RealMuninDevice(MuninDevice):
                     # This is the first notification after reconnection
                     self.time_tracker.resume_session_if_same_face(face_id)
                     self.is_reconnecting = False
-                    logger.log_event(f"Resumed session after reconnection: face {face_id}")
+                    logger.log_event(f"Resumed session after reconnection: face {face_id}", "debug")
                 else:
                     # This is a normal face change
                     self.time_tracker.log_face_change(face_id)
@@ -258,6 +263,8 @@ class RealMuninDevice(MuninDevice):
                 
                 if not was_reconnecting:  # Don't double-log during reconnection
                     logger.log_face_change(face_id, face_label)
+            else:
+                logger.log_event(f"Received unknown notification format: {len(data)} bytes", "debug")
                 
         except Exception as e:
             logger.log_event(f"Error parsing log notification: {e}")
@@ -268,13 +275,12 @@ class FakeMuninDevice(MuninDevice):
     def __init__(self, name: str = "Munin-Test", address: str = "00:11:22:33:44:55"):
         super().__init__(name, address)
         self.current_face = 1
-        self.session_id = 1
         self.face_configs: Dict[int, FaceConfig] = {}
         self.is_running = False
         self._simulation_task: Optional[asyncio.Task] = None
         
         # Protocol simulation state
-        self.device_uptime_ms = 0  # Device uptime in milliseconds
+        self.device_uptime_s = 0  # Device uptime in seconds
         self.session_start_time = None  # When current session started
     
     async def connect(self) -> bool:
@@ -338,32 +344,32 @@ class FakeMuninDevice(MuninDevice):
         
         for config in face_configs:
             self.face_configs[config.face_id] = config
-            logger.log_event(f"Fake device received face config for face {config.face_id}: RGB({config.r},{config.g},{config.b})")
+            logger.log_event(f"Fake device received face config for face {config.face_id}: RGB({config.r},{config.g},{config.b})", "debug")
         
         return True
     
-    def _send_protocol_packet(self, event_type: int, delta_ms: int = 0):
-        """Generate and process a 7-byte Munin protocol packet internally"""
+    def _send_protocol_packet(self, event_type: int, delta_s: int = 0):
+        """Generate and process a 6-byte Munin protocol packet internally"""
         try:
-            # Create 7-byte packet: event_type, session_id, delta_ms (little-endian), face_id
-            packet = struct.pack('<BBIB', event_type, self.session_id, delta_ms, self.current_face)
+            # Create 6-byte packet: event_type, delta_s (little-endian), face_id
+            packet = struct.pack('<BIB', event_type, delta_s, self.current_face)
             
             # Process packet internally (same as real device would via BLE notification)
             log_entry = MuninLogEntry.from_packet(packet, datetime.now())
             self._process_log_entry(log_entry)
             
-            logger.log_event(f"Fake device sent packet: type=0x{event_type:02x}, session={self.session_id}, delta={delta_ms}, face={self.current_face}")
+            logger.log_event(f"Fake device sent packet: type=0x{event_type:02x}, delta={delta_s}, face={self.current_face}", "debug")
         except Exception as e:
             logger.log_event(f"Error sending fake protocol packet: {e}")
     
-    def _get_session_delta_ms(self) -> int:
-        """Get milliseconds since current session started"""
+    def _get_session_delta_s(self) -> int:
+        """Get seconds since current session started"""
         if not self.session_start_time:
             return 0
         
         from datetime import datetime
         delta = datetime.now() - self.session_start_time
-        return int(delta.total_seconds() * 1000)
+        return int(delta.total_seconds())
     
     async def _simulate_device(self):
         """Simulate device behavior with real Munin protocol"""
@@ -373,12 +379,12 @@ class FakeMuninDevice(MuninDevice):
         logger.log_event(f"Started fake Munin device simulation: {self.name}")
         
         # Send BOOT event (0x10) to start simulation
-        self.device_uptime_ms = 0
+        self.device_uptime_s = 0
         self.session_start_time = datetime.now()
         self._send_protocol_packet(0x10, 0)  # Boot event
         
         # Send initial face switch event (0x01)
-        self._send_protocol_packet(0x01, 0)  # Face switch with delta_ms = 0
+        self._send_protocol_packet(0x01, 0)  # Face switch with delta_s = 0
         
         last_ongoing_log = datetime.now()
         ongoing_log_interval = 10.0  # Send ongoing log every 10 seconds
@@ -388,12 +394,12 @@ class FakeMuninDevice(MuninDevice):
                 current_time = datetime.now()
                 
                 # Update device uptime
-                self.device_uptime_ms += 2000  # 2 seconds per cycle
+                self.device_uptime_s += 2  # 2 seconds per cycle
                 
                 # Send ongoing log entries periodically (0x02)
                 if (current_time - last_ongoing_log).total_seconds() >= ongoing_log_interval:
-                    delta_ms = self._get_session_delta_ms()
-                    self._send_protocol_packet(0x02, delta_ms)  # Ongoing log
+                    delta_s = self._get_session_delta_s()
+                    self._send_protocol_packet(0x02, delta_s)  # Ongoing log
                     last_ongoing_log = current_time
                 
                 # Simulate battery drain
@@ -403,19 +409,18 @@ class FakeMuninDevice(MuninDevice):
                     
                     # Send low battery warning at 15%
                     if old_battery > 15 and self.battery_level <= 15:
-                        self._send_protocol_packet(0x12, self.device_uptime_ms)  # Low battery
+                        self._send_protocol_packet(0x12, self.device_uptime_s)  # Low battery
                 
                 # Simulate face changes
                 if random.random() < 0.1:  # 10% chance per cycle (more frequent for testing)
                     old_face = self.current_face
                     self.current_face = random.randint(1, 6)
                     if old_face != self.current_face:
-                        # Face changed - start new session
-                        self.session_id = (self.session_id + 1) % 256
+                        # Face changed - start new session time tracking
                         self.session_start_time = datetime.now()
                         
                         # Send face switch event
-                        self._send_protocol_packet(0x01, 0)  # Face switch with delta_ms = 0
+                        self._send_protocol_packet(0x01, 0)  # Face switch with delta_s = 0
                         
                         logger.log_event(f"Fake device face changed from {old_face} to {self.current_face}")
                 
@@ -429,6 +434,6 @@ class FakeMuninDevice(MuninDevice):
         
         # Send shutdown event before stopping
         if self.is_connected():
-            self._send_protocol_packet(0x11, self.device_uptime_ms)  # Shutdown event
+            self._send_protocol_packet(0x11, self.device_uptime_s)  # Shutdown event
         
         logger.log_event("Fake Munin device simulation stopped")

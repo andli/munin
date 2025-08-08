@@ -1,10 +1,10 @@
-# 🐦‍⬛ Munin Logging Protocol (v1.3)
+# 🐦‍⬛ Munin Logging Protocol (v2.0)
 
 ## Overview
 The Munin Logging Protocol defines how a Munin time-tracking device communicates activity logs over Bluetooth Low Energy (BLE) and optionally over Serial. The protocol supports:
 
 - Face switch tracking
-- Long-running face sessions
+- Long-running face sessions  
 - Boot and shutdown events
 - Disconnection tolerance
 - Receiving face color configuration from the client
@@ -13,16 +13,15 @@ The Munin Logging Protocol defines how a Munin time-tracking device communicates
 ---
 
 ## Packet Format
-Each log entry is sent as a **7-byte binary packet**.
+Each log entry is sent as a **6-byte binary packet**.
 
 ### Log Packet Structure
 | Field        | Type     | Size | Description                                     |
 |--------------|----------|------|-------------------------------------------------|
 | `event_type` | `uint8`  | 1 B  | Type of event (see Event Types below)          |
-| `session_id` | `uint8`  | 1 B  | Session identifier for current face activity    |
-| `delta_ms`   | `uint32` | 4 B  | Milliseconds since start of session or boot     |
+| `delta_s`    | `uint32` | 4 B  | Seconds since current face session started     |
 | `face_id`    | `uint8`  | 1 B  | ID of the face currently active (0–5)           |
-| **Total**    |          | 7 B  |                                                 |
+| **Total**    |          | 6 B  |                                                 |
 
 ---
 
@@ -31,8 +30,9 @@ Event types are represented as single-byte constants in the first field of the p
 
 | `event_type` | Name              | Description                                                |
 |--------------|-------------------|------------------------------------------------------------|
-| `0x01`       | Face Switch        | A new face is now facing up. `delta_ms = 0`               |
+| `0x01`       | Face Switch        | A new face is now facing up. Always has `delta_s = 0`    |
 | `0x02`       | Ongoing Log        | Time has elapsed on the same face                         |
+| `0x03`       | State Sync         | Connection state sync - device reports current face and accumulated time |
 | `0x10`       | Boot               | Device powered on. Anchors device uptime. Will be rare.   |
 | `0x11`       | Shutdown           | Device is powering down (low battery or user-triggered)   |
 | `0x12`       | Low Battery        | Battery voltage below safe threshold                      |
@@ -48,26 +48,56 @@ Each face of the Munin cube is assigned an ID from 0 to 5. The mapping is define
 
 ---
 
-## Session ID
-`session_id` is an 8-bit counter incremented on each face switch. It allows the client to:
-- Distinguish between different face sessions
-- Reconstruct wall-clock time from `delta_ms` and arrival time
-- Handle Bluetooth disconnects and resume logging with continuity
+## Delta Time Interpretation
+`delta_s` represents seconds since the current face session started:
+- **Face Switch (`0x01`)**: Always `delta_s = 0` - indicates user switched to a new face
+- **State Sync (`0x03`)**: `delta_s > 0` - indicates device was already on this face when client connected
+- **Ongoing Log (`0x02`)**: `delta_s > 0` - periodic time updates for the same face
 
-Wraparound is allowed (255 → 0). Clients must manage anchors accordingly.
+### Event Type Usage
+- **`0x01` Face Switch**: Only sent when user physically changes cube orientation
+- **`0x03` State Sync**: Only sent when BLE client connects to synchronize current state
+- **`0x02` Ongoing Log**: Periodic updates during long face sessions (optional)
+
+---
+
+## BLE Connection Behavior
+The device provides state synchronization when clients connect or reconnect:
+
+### Connection State Sync
+When a BLE client connects, the device sends the current state:
+- Event type `0x03` (State Sync)
+- `delta_s` = elapsed time since the current face started (0 if device just rebooted)
+- Current `face_id`
+
+This ensures clients receive the current device state even if they missed the initial face switch event.
+
+### Device Reboot Handling
+When the device reboots (power cycle, firmware update, etc.):
+- Device loses all previous timing state (no persistent storage)
+- Device detects current face orientation and starts timing from zero
+- Next BLE connection will receive state sync with `delta_s = 0`
+
+### Disconnection Tolerance
+The protocol handles temporary disconnections:
+- Device continues timing internally while disconnected
+- Client reconnection receives current state with accumulated `delta_s`
+- Timing continuity is maintained for powered-on disconnections
 
 ---
 
 ## Client-Side Time Reconstruction
 Clients reconstruct wall-clock timestamps using:
-- The time of arrival of a packet with `delta_ms = 0` (start of session)
-- All subsequent logs for the same `session_id`
+- The arrival time of any packet
+- Working backwards using `delta_s` to determine session start time
 
 ### Example:
-1. Client receives `{0x01, 42, 0, 2}` at 2025-07-31T12:00:00Z  
-   - Anchor: Session 42, Face 2 started at 12:00:00Z  
-2. Receives `{0x02, 42, 300000, 2}` (delta 5 min)  
-   - Timestamp: 12:05:00Z
+1. Client receives `{0x03, 300, 2}` at 2025-07-31T12:05:00Z  
+   - State sync: Face 2 active for 300s
+   - Session start time: 12:05:00Z - 300s = 12:00:00Z
+   - Current time on Face 2: 12:05:00Z
+2. Later receives `{0x01, 0, 3}` at 12:07:00Z
+   - Face switch to Face 3 at 12:07:00Z
 
 ---
 

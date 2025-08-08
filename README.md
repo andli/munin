@@ -102,6 +102,7 @@ https://forum.seeedstudio.com/t/xiao-ble-sense-cannot-communicate-with-imu-senso
 * Implement real battery voltage reading (ADC) - when hardware is ready
 * Add charging status detection - when hardware is ready
 * Stronger LED than the builtin one needed - add a WS2812B NeoPixel?
+* Add on/off button?
 
 ## Protocol & Infrastructure
 * Finalize 7-byte Munin protocol implementation (currently partially implemented)
