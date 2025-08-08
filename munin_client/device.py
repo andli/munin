@@ -62,9 +62,9 @@ class MuninDevice(ABC):
         self.battery_level: Optional[int] = None
         self.is_connected_flag = False
         
-        # Munin-specific service UUIDs
-        self.MUNIN_SERVICE_UUID = "12345678-1234-1234-1234-123456789abc"
-        self.MUNIN_LOG_CHAR_UUID = "87654321-4321-4321-4321-cba987654321"
+        # Munin-specific service UUIDs (matching Arduino code)
+        self.MUNIN_SERVICE_UUID = "6e400001-8a3a-11e5-8994-feff819cdc9f"
+        self.MUNIN_LOG_CHAR_UUID = "6e400002-8a3a-11e5-8994-feff819cdc9f"
         self.MUNIN_CONFIG_CHAR_UUID = "11111111-2222-3333-4444-555555555555"
         
         # Standard BLE Battery Service
@@ -160,7 +160,7 @@ class RealMuninDevice(MuninDevice):
                 return None
             
             # Check if device has battery service
-            services = await self.client.get_services()
+            services = self.client.services
             for service in services:
                 if service.uuid.lower() == self.BATTERY_SERVICE_UUID.lower():
                     battery_data = await self.client.read_gatt_char(self.BATTERY_LEVEL_CHAR_UUID)
@@ -195,7 +195,7 @@ class RealMuninDevice(MuninDevice):
         """Setup notifications for log entries"""
         try:
             # Check if device has Munin service
-            services = await self.client.get_services()
+            services = self.client.services
             for service in services:
                 if service.uuid.lower() == self.MUNIN_SERVICE_UUID.lower():
                     # Setup notification handler for log characteristic

@@ -125,8 +125,8 @@ void setup() {
     while (1);
   }
 
-  BLE.setLocalName("Munin");
-  BLE.setDeviceName("Munin");
+  BLE.setLocalName("Munin-0001");
+  BLE.setDeviceName("Munin-0001");
 
   // Init characteristics with a value
   faceCharacteristic.writeValue(0);

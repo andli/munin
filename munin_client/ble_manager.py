@@ -15,6 +15,10 @@ class BLEDeviceManager:
         self.connected_device: Optional[MuninDevice] = None
         self.battery_level: Optional[int] = None
         
+        # Munin-specific UUIDs
+        self.MUNIN_FACE_SERVICE_UUID = "6e400001-8a3a-11e5-8994-feff819cdc9f"
+        self.MUNIN_FACE_CHAR_UUID = "6e400002-8a3a-11e5-8994-feff819cdc9f"
+        
         # Fake device support
         self.fake_device: Optional[FakeMuninDevice] = None
         if enable_fake_device:
@@ -32,17 +36,35 @@ class BLEDeviceManager:
         
         try:
             discovered = await BleakScanner.discover(timeout=timeout)
+            logger.log_event(f"BLE scan completed, found {len(discovered)} raw devices")
+            
             for device in discovered:
                 name = device.name or "Unknown"
                 address = device.address
                 rssi = getattr(device, 'rssi', None)
                 
-                # Skip devices with no RSSI (often cached/inactive devices)
-                if rssi is None:
-                    continue
+                # Check if device advertises the Munin face service
+                advertised_services = getattr(device, 'metadata', {}).get('uuids', [])
+                has_munin_service = any(
+                    uuid.lower() == self.MUNIN_FACE_SERVICE_UUID.lower() 
+                    for uuid in advertised_services
+                )
                 
-                devices.append((name, address, str(rssi)))
-                logger.log_event(f"Found device: {name} ({address}) RSSI: {rssi}")
+                # Also check if device name contains "Munin" as fallback
+                is_munin_device = has_munin_service or 'munin' in name.lower()
+                
+                if is_munin_device:
+                    logger.log_event(f"Found Munin device: {name} ({address}) RSSI: {rssi} Service: {has_munin_service}")
+                    devices.append((name, address, str(rssi) if rssi is not None else "Unknown"))
+                # Skip non-Munin devices with no RSSI (often cached/inactive devices)
+                elif rssi is None:
+                    # Skip silently - don't log unknown devices without RSSI
+                    continue
+                else:
+                    # Only log non-Unknown devices with RSSI
+                    if name != "Unknown":
+                        logger.log_event(f"Found device: {name} ({address}) RSSI: {rssi}")
+                    devices.append((name, address, str(rssi)))
         except Exception as e:
             logger.log_event(f"Error scanning for devices: {e}")
         
@@ -52,15 +74,24 @@ class BLEDeviceManager:
             devices.append(fake_device_info)
             logger.log_event(f"Added fake device to scan results: {self.fake_device.name}")
         
+        logger.log_event(f"Final device list: {len(devices)} devices")
         return devices
     
     async def find_munin_devices(self) -> List[Tuple[str, str, str]]:
-        """Find devices with 'Munin' in the name"""
+        """Find devices with Munin face service UUID or 'Munin' in the name"""
         all_devices = await self.scan_for_devices(5.0)
-        munin_devices = [
-            (name, addr, rssi) for name, addr, rssi in all_devices 
-            if 'munin' in name.lower()
-        ]
+        munin_devices = []
+        
+        for name, addr, rssi in all_devices:
+            logger.log_event(f"Checking device: '{name}' for Munin match")
+            # The scan_for_devices already filtered for Munin devices,
+            # but we can do a double-check here based on name
+            if 'munin' in name.lower():
+                munin_devices.append((name, addr, rssi))
+                logger.log_event(f"  -> MATCH: {name}")
+            else:
+                logger.log_event(f"  -> No match for: {name}")
+        
         logger.log_event(f"Found {len(munin_devices)} Munin devices")
         return munin_devices
     
