@@ -16,6 +16,9 @@ dependencies = [
 [project.scripts]
 munin-client = "munin_client.__main__:main"
 
+[tool.setuptools.package-data]
+munin_client = ["*.png"]
+
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
