@@ -99,6 +99,14 @@ Test locally:
 
 `pipx run --spec . munin-client`
 
+### Zephyr migration
+
+To combat the miserably situation with Seeed's offical mbed/non-mbed board variants, I am trying to move over to Zephyr for firmware.
+
+* BLE
+* IMU
+* Battery: https://github.com/Tjoms99/xiao_sense_nrf52840_battery_lib
+
 ### Arduino details
 
 https://wiki.seeedstudio.com/XIAO_BLE/
