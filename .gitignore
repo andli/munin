@@ -163,3 +163,17 @@ Temporary Items
 
 # Project specific
 *.log
+
+# Zephyr workspace
+zephyr_workspace/
+zephyr-workspace/
+
+# Arduino IDE
+*.elf
+*.hex
+*.bin
+*.map
+
+# Zephyr build artifacts  
+munin_zephyr/build/
+munin_zephyr/.west/
