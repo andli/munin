@@ -14,6 +14,8 @@ class BLEDeviceManager:
         self.client: Optional[BleakClient] = None
         self.connected_device: Optional[MuninDevice] = None
         self.battery_level: Optional[int] = None
+        self.is_charging: bool = False
+        self.battery_voltage: Optional[float] = None
         
         # Munin-specific UUIDs
         self.MUNIN_FACE_SERVICE_UUID = "6e400001-8a3a-11e5-8994-feff819cdc9f"
@@ -22,7 +24,7 @@ class BLEDeviceManager:
         # Fake device support
         self.fake_device: Optional[FakeMuninDevice] = None
         if enable_fake_device:
-            self.fake_device = FakeMuninDevice()
+            self.fake_device = FakeMuninDevice(ble_manager=self)
             logger.log_event("Fake Munin device enabled for testing")
         
         # Standard BLE Battery Service UUID
@@ -126,7 +128,7 @@ class BLEDeviceManager:
             
             if self.client.is_connected:
                 # Create real device wrapper
-                real_munin = RealMuninDevice(name or "Unknown", address, self.client)
+                real_munin = RealMuninDevice(name or "Unknown", address, self.client, ble_manager=self)
                 if await real_munin.connect():
                     self.connected_device = real_munin
                     self.battery_level = await real_munin.read_battery_level()
@@ -190,6 +192,22 @@ class BLEDeviceManager:
     def get_battery_level(self) -> Optional[int]:
         """Get cached battery level"""
         return self.battery_level
+    
+    def get_charging_status(self) -> bool:
+        """Get current charging status"""
+        return self.is_charging
+    
+    def get_battery_voltage(self) -> Optional[float]:
+        """Get battery voltage if available"""
+        return self.battery_voltage
+    
+    def update_charging_status(self, charging: bool):
+        """Update charging status (called by device event processing)"""
+        self.is_charging = charging
+    
+    def update_battery_voltage(self, voltage: float):
+        """Update battery voltage (called by device event processing)"""
+        self.battery_voltage = voltage
     
     def is_connected(self) -> bool:
         """Check if currently connected to a device"""

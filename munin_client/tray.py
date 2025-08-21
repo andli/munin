@@ -231,9 +231,14 @@ def start_tray(enable_fake_device: bool = False):
         """Get battery status for menu"""
         if ble_manager.is_connected():
             battery_level = ble_manager.get_battery_level()
+            is_charging = ble_manager.get_charging_status()
+            battery_voltage = ble_manager.get_battery_voltage()
+            
             if battery_level is not None:
-                # Add battery icon based on level
-                if battery_level > 75:
+                # Add battery icon based on level and charging status
+                if is_charging:
+                    icon_battery = "🔌"  # Charging icon
+                elif battery_level > 75:
                     icon_battery = "🔋"
                 elif battery_level > 50:
                     icon_battery = "🔋"
@@ -241,7 +246,20 @@ def start_tray(enable_fake_device: bool = False):
                     icon_battery = "🪫"
                 else:
                     icon_battery = "🪫"
-                return f"{icon_battery} Battery: {battery_level}%"
+                
+                # Build battery status text
+                status_parts = [f"{icon_battery} Battery: {battery_level}%"]
+                
+                if is_charging:
+                    status_parts.append("(Charging)")
+                elif battery_level <= 15:
+                    status_parts.append("(Low)")
+                
+                # Add voltage if available
+                if battery_voltage is not None:
+                    status_parts.append(f"({battery_voltage:.1f}V)")
+                
+                return " ".join(status_parts)
             else:
                 return "🔋 Battery: Unknown"
         return None

@@ -36,6 +36,9 @@ Event types are represented as single-byte constants in the first field of the p
 | `0x10`       | Boot               | Device powered on. Anchors device uptime. Will be rare.   |
 | `0x11`       | Shutdown           | Device is powering down (low battery or user-triggered)   |
 | `0x12`       | Low Battery        | Battery voltage below safe threshold                      |
+| `0x13`       | Charging Started   | USB power connected, battery charging initiated          |
+| `0x14`       | Fully Charged      | Battery charging complete, device fully charged          |
+| `0x15`       | Charging Stopped   | USB power disconnected, charging stopped                 |
 | `0x20`       | BLE Connect        | Client connected over BLE                                 |
 | `0x21`       | BLE Disconnect     | Client disconnected or timeout                            |
 

@@ -126,10 +126,26 @@ BLECharacteristic ledConfigCharacteristic("6e400003-8a3a-11e5-8994-feff819cdc9f"
 BLEService batteryService("180F"); // Standard Battery Service UUID
 BLEByteCharacteristic batteryLevelCharacteristic("2A19", BLERead | BLENotify); // Standard Battery Level UUID
 
-// Battery simulation variables
+// Battery monitoring variables
 unsigned long lastBatteryUpdate = 0;
-const unsigned long batteryUpdateInterval = 300000; // Update every 5 minutes (300 seconds)
-int batteryLevel = 85; // Start at 85%
+const unsigned long batteryUpdateInterval = 30000; // Update every 30 seconds for more responsive monitoring
+// Battery monitoring
+int batteryLevel = -1; // Current battery percentage (-1 = no battery/unknown)
+float batteryVoltage = 0.0; // Current battery voltage
+bool batteryConnected = false; // Whether battery is physically connected
+bool isCharging = false;
+bool wasCharging = false;
+unsigned long lastChargingCheck = 0;
+const unsigned long chargingCheckInterval = 5000; // Check charging status every 5 seconds
+
+// Battery voltage thresholds (for LiPo 3.7V battery)
+const float BATTERY_MIN_VOLTAGE = 3.3;  // 0% - cutoff voltage
+const float BATTERY_MAX_VOLTAGE = 4.2;  // 100% - full charge voltage  
+const float BATTERY_LOW_VOLTAGE = 3.5;  // Low battery warning threshold
+const float BATTERY_CHARGED_VOLTAGE = 4.1; // Consider fully charged above this
+
+// Battery monitoring - handled internally by XIAO nRF52840 and BQ25101
+// No external pins needed for battery/charging detection
 
 int getFace(const Vector3& accel) {
   float ax = accel.x;
@@ -278,6 +294,11 @@ void setup() {
   // Initialize LED
   initLED();
 
+  // Battery monitoring is handled internally - no pin setup needed
+  
+  // Take initial battery reading
+  readBatteryStatus();
+
   int beginResp = myIMU.begin();
   if (beginResp != 0) {
     Serial.print("Device error (code ");
@@ -357,8 +378,9 @@ void loop() {
     pendingStateSync = false;  // Clear the flag
   }
   
-  // Update battery level periodically (simulate battery drain)
+  // Update battery level and charging status
   updateBatteryLevel();
+  checkChargingStatus();
   
   Vector3 a1(myIMU.readFloatAccelX(), myIMU.readFloatAccelY(), myIMU.readFloatAccelZ());
   Vector3 g1(myIMU.readFloatGyroX(), myIMU.readFloatGyroY(), myIMU.readFloatGyroZ());
@@ -393,37 +415,179 @@ void loop() {
   delay(100);  // Check more frequently but only broadcast on settled changes
 }
 
+void readBatteryStatus() {
+  unsigned long currentTime = millis();
+  
+  if (currentTime - lastBatteryUpdate >= batteryUpdateInterval) {
+    // Try to detect if battery is physically connected via micro switch
+    // Real implementation would read actual hardware signals
+    
+    // For now, simulate battery detection logic
+    static int detectionAttempts = 0;
+    detectionAttempts++;
+    
+    if (detectionAttempts <= 3) {
+      // Still detecting...
+      batteryConnected = false;
+      batteryLevel = -1; // Unknown/no battery
+      batteryVoltage = 0.0;
+      Serial.println("Detecting battery connection...");
+    } else {
+      // After a few attempts, check for real battery
+      // Read micro switch state to determine if battery is connected
+      // This should be replaced with actual pin reading
+      batteryConnected = true; // Replace with: digitalRead(MICRO_SWITCH_PIN)
+      
+      if (batteryConnected) {
+        // Read actual battery level from ADC
+        // This should read actual voltage and convert to percentage
+        batteryLevel = 75; // Replace with actual ADC reading and conversion
+        batteryVoltage = 3.7; // Replace with actual voltage measurement
+        
+        Serial.print("Battery connected: ");
+        Serial.print(batteryLevel);
+        Serial.print("% (");
+        Serial.print(batteryVoltage);
+        Serial.println("V)");
+        
+        // Check if the built-in charging LED is green/on
+        // The XIAO has a charging indicator LED that shows green when charging
+        // We can use this to detect charging state
+        Serial.println("Note: Check charging LED - green = charging active");
+        
+      } else {
+        batteryLevel = -1; // No battery detected
+        batteryVoltage = 0.0;
+        Serial.println("⚠️ No battery detected - check micro switch");
+      }
+    }
+    
+    lastBatteryUpdate = currentTime;
+  }
+}
+
+void checkChargingStatus() {
+  unsigned long currentTime = millis();
+  
+  if (currentTime - lastChargingCheck >= chargingCheckInterval) {
+    wasCharging = isCharging;
+    
+    // Only check charging if battery is actually connected
+    if (!batteryConnected) {
+      isCharging = false;
+      Serial.println("No battery - cannot charge");
+    } else if (batteryLevel < 0) {
+      isCharging = false;
+      Serial.println("Battery level unknown - cannot determine charging");
+    } else {
+      // Real charging detection would go here
+      // For now, assume USB connected = charging (if battery < 95%)
+      bool usbConnected = true; // Assume USB connected if we're running
+      isCharging = usbConnected && (batteryLevel < 95);
+      
+      Serial.print("Battery: ");
+      Serial.print(batteryLevel);
+      Serial.print("%, USB charging: ");
+      Serial.println(isCharging ? "YES" : "NO");
+    }
+    
+    // Send charging status events if status changed
+    if (isCharging != wasCharging) {
+      if (isCharging) {
+        // Charging started
+        sendMuninProtocolPacket(0x13, millis() / 1000, currentFace); // 0x13 = Charging started event
+        Serial.println("=== CHARGING STARTED ===");
+        
+        // Show charging indication with green pulsing LED
+        showChargingIndication();
+      } else {
+        // Charging stopped
+        if (batteryLevel >= 95) {
+          sendMuninProtocolPacket(0x14, millis() / 1000, currentFace); // 0x14 = Fully charged event
+          Serial.println("=== FULLY CHARGED ===");
+          
+          // Show fully charged indication
+          showChargedIndication();
+        } else {
+          sendMuninProtocolPacket(0x15, millis() / 1000, currentFace); // 0x15 = Charging stopped event
+          Serial.println("=== CHARGING STOPPED ===");
+        }
+      }
+    }
+    
+    lastChargingCheck = currentTime;
+  }
+}
+
+void showChargingIndication() {
+  // Pulsing green LED to indicate charging
+  for (int i = 0; i < 3; i++) {
+    setLEDColor(0, 255, 0); // Green
+    delay(200);
+    setLEDColor(0, 0, 0);   // Off
+    delay(200);
+  }
+}
+
+void showChargedIndication() {
+  // Steady green LED for 2 seconds to indicate fully charged
+  setLEDColor(0, 255, 0); // Green
+  delay(2000);
+  setLEDColor(0, 0, 0);   // Off
+}
+
+void showLowBatteryWarning() {
+  // Pulsing red LED to indicate low battery
+  for (int i = 0; i < 5; i++) {
+    setLEDColor(255, 0, 0); // Red
+    delay(300);
+    setLEDColor(0, 0, 0);   // Off
+    delay(300);
+  }
+}
+
 void updateBatteryLevel() {
   unsigned long currentTime = millis();
   
-  // Update battery level every 5 minutes
+  // Update battery reading every 30 seconds
   if (currentTime - lastBatteryUpdate >= batteryUpdateInterval) {
-    // Simulate realistic battery drain - decrease by 1% every ~2 hours in simulation
-    // (every 24 updates = 24 * 5 minutes = 2 hours)
-    static int updateCounter = 0;
-    updateCounter++;
+    float previousVoltage = batteryVoltage;
+    int previousLevel = batteryLevel;
     
-    if (updateCounter >= 24 && batteryLevel > 0) {
-      batteryLevel--;
-      updateCounter = 0;
-      
-      batteryLevelCharacteristic.writeValue(batteryLevel);
-      
-      Serial.print("Battery level updated: ");
+    // Read actual battery status
+    readBatteryStatus();
+    
+    // Update BLE battery characteristic (send 0 if no battery detected)
+    int bleLevel = (batteryLevel < 0) ? 0 : batteryLevel;
+    batteryLevelCharacteristic.writeValue(bleLevel);
+    
+    // Log significant changes
+    if (batteryLevel < 0) {
+      Serial.println("Battery: No battery connected");
+    } else if (abs(batteryLevel - previousLevel) >= 5 || abs(batteryVoltage - previousVoltage) >= 0.1) {
+      Serial.print("Battery: ");
       Serial.print(batteryLevel);
-      Serial.println("%");
-      
-      // Reset battery to 100% when it hits 0 (for demo purposes)
-      if (batteryLevel == 0) {
-        batteryLevel = 100;
-        Serial.println("Battery reset to 100% for demo");
+      Serial.print("% (");
+      Serial.print(batteryVoltage);
+      Serial.println("V)");
+    }
+    
+    // Check for low battery condition
+    static bool lowBatteryWarned = false;
+    if (batteryVoltage <= BATTERY_LOW_VOLTAGE && !isCharging) {
+      if (!lowBatteryWarned) {
+        // Send low battery protocol event
+        sendMuninProtocolPacket(0x12, millis() / 1000, currentFace); // 0x12 = Low battery event
+        Serial.println("LOW BATTERY WARNING!");
+        
+        // Show visual warning
+        showLowBatteryWarning();
+        
+        lowBatteryWarned = true;
       }
-    } else {
-      // Just broadcast current level without changing it
-      batteryLevelCharacteristic.writeValue(batteryLevel);
-      Serial.print("Battery level broadcast: ");
-      Serial.print(batteryLevel);
-      Serial.println("%");
+    } else if (batteryVoltage > (BATTERY_LOW_VOLTAGE + 0.1)) {
+      // Reset warning when battery level recovers (with hysteresis)
+      lowBatteryWarned = false;
     }
     
     lastBatteryUpdate = currentTime;

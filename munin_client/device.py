@@ -55,13 +55,14 @@ class FaceConfig:
 class MuninDevice(ABC):
     """Abstract base class for Munin devices (real and fake)"""
     
-    def __init__(self, name: str, address: str):
+    def __init__(self, name: str, address: str, ble_manager=None):
         self.name = name
         self.address = address
         self.battery_level: Optional[int] = None
         self.is_connected_flag = False
         self.time_tracker = TimeTracker()  # Add time tracker
         self.is_reconnecting = False  # Track reconnection state
+        self.ble_manager = ble_manager  # Reference to BLE manager for callbacks
         
         # Munin-specific service UUIDs (matching Arduino code)
         self.MUNIN_SERVICE_UUID = "6e400001-8a3a-11e5-8994-feff819cdc9f"
@@ -123,14 +124,44 @@ class MuninDevice(ABC):
             logger.log_event(f"Connection state sync: face {log_entry.face_id} active for {log_entry.delta_s}s")
             # Don't log as a new face change, just update tracking state
             self.time_tracker.sync_current_face(log_entry.face_id, log_entry.delta_s)
-        
-        # TODO: Handle other event types (battery, boot, etc.) if needed
+            
+        elif log_entry.event_type == 0x10:  # Boot event
+            logger.log_event("Device booted")
+            
+        elif log_entry.event_type == 0x11:  # Shutdown event
+            logger.log_event("Device shutting down")
+            
+        elif log_entry.event_type == 0x12:  # Low battery event
+            logger.log_event(f"LOW BATTERY WARNING - device voltage below safe threshold")
+            
+        elif log_entry.event_type == 0x13:  # Charging started event
+            logger.log_event("CHARGING STARTED - USB power connected")
+            if self.ble_manager:
+                self.ble_manager.update_charging_status(True)
+            
+        elif log_entry.event_type == 0x14:  # Fully charged event
+            logger.log_event("FULLY CHARGED - battery charging complete")
+            if self.ble_manager:
+                self.ble_manager.update_charging_status(False)  # Charging complete
+            
+        elif log_entry.event_type == 0x15:  # Charging stopped event
+            logger.log_event("CHARGING STOPPED - USB power disconnected")
+            if self.ble_manager:
+                self.ble_manager.update_charging_status(False)
+            
+        elif log_entry.event_type == 0x20:  # BLE connect event
+            logger.log_event("BLE client connected")
+            
+        elif log_entry.event_type == 0x21:  # BLE disconnect event
+            logger.log_event("BLE client disconnected")
+            
+        # TODO: Handle other event types if needed in the future
 
 class RealMuninDevice(MuninDevice):
     """Real Munin BLE device implementation"""
     
-    def __init__(self, name: str, address: str, client):
-        super().__init__(name, address)
+    def __init__(self, name: str, address: str, client, ble_manager=None):
+        super().__init__(name, address, ble_manager)
         self.client = client
     
     async def connect(self) -> bool:
@@ -272,8 +303,8 @@ class RealMuninDevice(MuninDevice):
 class FakeMuninDevice(MuninDevice):
     """Fake Munin device for testing"""
     
-    def __init__(self, name: str = "Munin-Test", address: str = "00:11:22:33:44:55"):
-        super().__init__(name, address)
+    def __init__(self, name: str = "Munin-Test", address: str = "00:11:22:33:44:55", ble_manager=None):
+        super().__init__(name, address, ble_manager)
         self.current_face = 1
         self.face_configs: Dict[int, FaceConfig] = {}
         self.is_running = False
@@ -282,6 +313,11 @@ class FakeMuninDevice(MuninDevice):
         # Protocol simulation state
         self.device_uptime_s = 0  # Device uptime in seconds
         self.session_start_time = None  # When current session started
+        
+        # Battery and charging simulation
+        self.is_charging = False
+        self.charging_start_time = None
+        self.last_battery_check = None
     
     async def connect(self) -> bool:
         """Connect to the fake device"""
@@ -381,6 +417,7 @@ class FakeMuninDevice(MuninDevice):
         # Send BOOT event (0x10) to start simulation
         self.device_uptime_s = 0
         self.session_start_time = datetime.now()
+        self.last_battery_check = datetime.now()
         self._send_protocol_packet(0x10, 0)  # Boot event
         
         # Send initial face switch event (0x01)
@@ -402,14 +439,46 @@ class FakeMuninDevice(MuninDevice):
                     self._send_protocol_packet(0x02, delta_s)  # Ongoing log
                     last_ongoing_log = current_time
                 
-                # Simulate battery drain
-                if random.random() < 0.02:  # 2% chance per cycle
+                # Simulate charging status changes
+                if random.random() < 0.05:  # 5% chance per cycle to change charging status
+                    if not self.is_charging:
+                        # Start charging
+                        self.is_charging = True
+                        self.charging_start_time = current_time
+                        self._send_protocol_packet(0x13, self.device_uptime_s)  # Charging started
+                        logger.log_event("Fake device: Charging simulation started")
+                    elif random.random() < 0.3:  # 30% chance to stop charging if already charging
+                        # Stop charging
+                        was_fully_charged = self.battery_level >= 95
+                        self.is_charging = False
+                        self.charging_start_time = None
+                        
+                        if was_fully_charged:
+                            self._send_protocol_packet(0x14, self.device_uptime_s)  # Fully charged
+                            logger.log_event("Fake device: Fully charged simulation")
+                        else:
+                            self._send_protocol_packet(0x15, self.device_uptime_s)  # Charging stopped
+                            logger.log_event("Fake device: Charging stopped simulation")
+                
+                # Simulate battery changes based on charging status
+                if (current_time - self.last_battery_check).total_seconds() >= 5.0:  # Check every 5 seconds
                     old_battery = self.battery_level
-                    self.battery_level = max(0, self.battery_level - 1)
+                    
+                    if self.is_charging:
+                        # Battery increases while charging
+                        if self.battery_level < 100:
+                            self.battery_level = min(100, self.battery_level + random.randint(1, 3))
+                    else:
+                        # Battery decreases when not charging
+                        if random.random() < 0.3:  # 30% chance to drain
+                            self.battery_level = max(0, self.battery_level - 1)
                     
                     # Send low battery warning at 15%
                     if old_battery > 15 and self.battery_level <= 15:
                         self._send_protocol_packet(0x12, self.device_uptime_s)  # Low battery
+                        logger.log_event("Fake device: Low battery warning")
+                    
+                    self.last_battery_check = current_time
                 
                 # Simulate face changes
                 if random.random() < 0.1:  # 10% chance per cycle (more frequent for testing)
