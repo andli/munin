@@ -101,7 +101,7 @@ Test locally:
 
 ### Zephyr migration
 
-To combat the miserably situation with Seeed's offical mbed/non-mbed board variants, I am trying to move over to Zephyr for firmware.
+To combat the miserable situation with Seeed's offical mbed/non-mbed board variants, I am trying to move over to Zephyr for firmware.
 
 * BLE
 * IMU
