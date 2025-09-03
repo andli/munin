@@ -1,0 +1,18 @@
+/*
+ * USB CDC console configuration
+ */
+
+/ {
+	chosen {
+		zephyr,console = &board_cdc_acm_uart;
+		zephyr,log-backend = &board_cdc_acm_uart;
+	};
+};
+
+&usbd {
+	status = "okay";
+};
+
+&board_cdc_acm_uart {
+	status = "okay";
+};

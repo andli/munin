@@ -1,0 +1,7 @@
+[manifest]
+path = munin_zephyr
+file = west.yml
+
+[zephyr]
+base = zephyr
+
