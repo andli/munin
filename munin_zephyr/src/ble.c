@@ -84,7 +84,7 @@ int munin_ble_init(void)
 {
     int err = bt_enable(NULL);
     if (err) return err;
-    return bt_le_adv_start(BT_LE_ADV_CONN_NAME, ad, ARRAY_SIZE(ad), NULL, 0);
+    return bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad), NULL, 0);
 }
 
 void munin_ble_update(void)
