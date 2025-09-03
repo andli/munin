@@ -26,14 +26,43 @@ static uint8_t face_from_accel(const struct sensor_value *v)
 
 int munin_imu_init(void)
 {
-    accel = DEVICE_DT_GET_ONE(st_lsm6dsl);
-    if (!accel || !device_is_ready(accel)) return -1;
-    k_sleep(K_MSEC(50));
+    accel = DEVICE_DT_GET(DT_NODELABEL(lsm6ds3tr_c));
+    printk("IMU: Device pointer: %p\n", accel);
+    if (!accel) {
+        printk("IMU: Device not found\n");
+        return -1;
+    }
+    if (!device_is_ready(accel)) {
+        printk("IMU: Device not ready\n");
+        return -1;
+    }
+    printk("IMU: Device ready, testing sensor read...\n");
+    
+    k_sleep(K_MSEC(100)); // Longer delay for sensor to stabilize
     struct sensor_value v[3];
-    if (sensor_sample_fetch(accel) || sensor_channel_get(accel, SENSOR_CHAN_ACCEL_XYZ, v)) return -1;
+    int ret = sensor_sample_fetch(accel);
+    if (ret) {
+        printk("IMU: Sample fetch failed: %d\n", ret);
+        return -1;
+    }
+    ret = sensor_channel_get(accel, SENSOR_CHAN_ACCEL_XYZ, v);
+    if (ret) {
+        printk("IMU: Channel get failed: %d\n", ret);
+        return -1;
+    }
+    
+    printk("IMU: Raw sensor values: [0]=%d.%06d [1]=%d.%06d [2]=%d.%06d\n",
+           v[0].val1, v[0].val2, v[1].val1, v[1].val2, v[2].val1, v[2].val2);
+    
     s_face = s_candidate = face_from_accel(v);
     s_candidate_since = k_uptime_get();
     s_session_start = s_candidate_since;
+
+    printk("IMU: Initial face detected: %d\n", s_face);
+    printk("IMU: Accel values: x=%d.%06d y=%d.%06d z=%d.%06d\n", 
+           v[0].val1, abs(v[0].val2),
+           v[1].val1, abs(v[1].val2), 
+           v[2].val1, abs(v[2].val2));
 
     munin_packet_t pkt; // Boot event
     munin_protocol_create_packet(&pkt, MUNIN_EVENT_BOOT, 0, s_face);
@@ -45,19 +74,49 @@ void munin_imu_update(void)
 {
     if (!accel) return;
     static int64_t last;
+    static int debug_counter = 0;
     int64_t now = k_uptime_get();
     if (now - last < 100) return; // 10 Hz
     last = now;
 
     struct sensor_value v[3];
-    if (sensor_sample_fetch(accel) || sensor_channel_get(accel, SENSOR_CHAN_ACCEL_XYZ, v)) return;
+    int ret = sensor_sample_fetch(accel);
+    if (ret) {
+        if (debug_counter % 50 == 0) {
+            printk("IMU: Sample fetch error: %d\n", ret);
+        }
+        debug_counter++;
+        return;
+    }
+    ret = sensor_channel_get(accel, SENSOR_CHAN_ACCEL_XYZ, v);
+    if (ret) {
+        if (debug_counter % 50 == 0) {
+            printk("IMU: Channel get error: %d\n", ret);
+        }
+        debug_counter++;
+        return;
+    }
+    
     uint8_t detected = face_from_accel(v);
+    
+    // Debug output every 5 seconds
+    if (debug_counter % 50 == 0) {
+        printk("IMU: x=%d.%06d y=%d.%06d z=%d.%06d -> face=%d (current=%d)\n", 
+               v[0].val1, abs(v[0].val2),
+               v[1].val1, abs(v[1].val2), 
+               v[2].val1, abs(v[2].val2),
+               detected, s_face);
+    }
+    debug_counter++;
+    
     if (detected != s_candidate) {
         s_candidate = detected;
         s_candidate_since = now;
+        printk("IMU: New candidate face: %d\n", detected);
         return;
     }
     if (s_candidate != s_face && (now - s_candidate_since) >= FACE_SETTLE_TIME_MS) {
+        printk("IMU: Face settled: %d -> %d\n", s_face, s_candidate);
         s_face = s_candidate;
         s_session_start = now;
         munin_packet_t pkt;

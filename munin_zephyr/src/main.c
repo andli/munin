@@ -54,15 +54,26 @@ int main(void)
 	bool led = true;
 	int counter = 0;
 	while (1) {
-		gpio_pin_set_dt(&red_led, (int)led);
-		printk("tick %d face=%u batt=%u%% conn=%d\n", counter++, munin_imu_get_current_face(),
+		// Show face-based LED behavior (less annoying)
+		uint8_t current_face = munin_imu_get_current_face();
+		if (current_face == 0) {
+			// Face 0 (unknown/flat) - slow blink (once every 2 seconds)
+			if ((counter % 4) == 0) {
+				led = !led;
+			}
+			gpio_pin_set_dt(&red_led, (int)led);
+		} else {
+			// For detected faces 1-6, show solid LED (no blinking)
+			gpio_pin_set_dt(&red_led, 1);
+		}
+		
+		printk("tick %d face=%u batt=%u%% conn=%d\n", counter++, current_face,
 			   munin_battery_get_percentage(), munin_ble_is_connected());
 
 		munin_battery_update();
 		munin_imu_update();
 		munin_ble_update();
 
-		led = !led;
 		k_sleep(K_MSEC(500));
 	}
 	return 0;
