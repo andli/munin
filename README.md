@@ -1,17 +1,6 @@
 # 🐦‍⬛ Munin
 
-Munin helps you track time for different tasks during your work day. Each face represents a diff## Munin device
-
-- ~~Broadcast face change only on movement instead of every 1000 ms~~ ✅
-- ~~Broadcast battery level periodically (currently simulated - reduce frequency)~~ ✅
-- ~~Receive LED configuration from client~~ ✅
-- ~~Light up LED on face change~~ ✅
-- ~~Implement real battery voltage reading (ADC)~~ ✅
-- ~~Add charging status detection (BQ25101 charging chip)~~ ✅
-- Stronger LED than the builtin one needed - add a WS2812B NeoPixel
-- Add on/off button and reset button
-- Power saving mode - "sleep" and wake on movement
-- Optimize BLE connection parameters for battery lifety — just flip the cube to start logging time for a specific task (ex. _"Product support"_, _"Emails"_, _"Coding"_ etc). Add labels to each side if you want.
+Munin helps you track time for different tasks during your work day. Each face represents a different activity — just flip the cube to start logging time for a specific task (ex. _"Product support"_, _"Emails"_, _"Coding"_ etc). Add labels to each side if you want.
 
 - 3D-printed
 - Bluetooth connected
