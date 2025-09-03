@@ -118,6 +118,7 @@ https://forum.seeedstudio.com/t/xiao-ble-sense-cannot-communicate-with-imu-senso
 
 ## Munin device
 
+- Move all Zephyr artifacts into /munin_zephyr instead of root
 - Broadcast face change only on movement
 - Broadcast battery level periodically
 - Receive LED configuration from client 
