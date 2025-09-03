@@ -118,12 +118,12 @@ https://forum.seeedstudio.com/t/xiao-ble-sense-cannot-communicate-with-imu-senso
 
 ## Munin device
 
-- ~~Broadcast face change only on movement instead of every 1000 ms~~ ✅
-- ~~Broadcast battery level periodically (currently simulated - reduce frequency)~~ ✅
-- ~~Receive LED configuration from client~~ ✅
-- ~~Light up LED on face change~~ ✅
-- ~~Implement real battery voltage reading (ADC) - when hardware is ready~~ ✅
-- ~~Add charging status detection - when hardware is ready~~ ✅
+- Broadcast face change only on movement
+- Broadcast battery level periodically
+- Receive LED configuration from client 
+- Light up LED on face change 
+- Implement real battery voltage reading (ADC) - when hardware is ready 
+- Add charging status detection - when hardware is ready 
 - Stronger LED than the builtin one needed - add a WS2812B NeoPixel
 - Add on/off button and reset button
 - Power saving mode - "sleep" and wake on movement
