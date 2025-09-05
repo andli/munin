@@ -164,24 +164,17 @@ Temporary Items
 # Project specific
 *.log
 
-# Zephyr workspace (actual west layout places these at repo root)
-zephyr/
-modules/
-bootloader/
-.west/
+# Zephyr workspace - isolated workspace with all dependencies
+zephyr_workspace/zephyr/
+zephyr_workspace/modules/
+zephyr_workspace/bootloader/
+zephyr_workspace/tools/
+zephyr_workspace/.west/
+zephyr_workspace/munin_app/build/
 
-# Zephyr tools and build artifacts
-munin_zephyr/tools/
-munin_zephyr/build/
-munin_zephyr/.west/
-
-# Also ignore if workspace lives under munin_zephyr (alternative layout)
-munin_zephyr/zephyr/
-munin_zephyr/modules/
-munin_zephyr/bootloader/
-
-# Arduino IDE
+# Zephyr build artifacts (in case any escape to root)
 *.elf
 *.hex
 *.bin
 *.map
+*.uf2
