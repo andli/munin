@@ -84,23 +84,34 @@ The device will flash the configured color briefly when switching faces.
 
 ## Dev
 
-Test locally:
+### Client App
 
+Run locally:
+```bash
+source .venv/bin/activate
+python -m munin_client
+```
+
+Or with pipx:
 `pipx run --spec . munin-client`
 
-### Zephyr migration
+### Firmware Development
 
-To combat the miserable situation with Seeed's offical mbed/non-mbed board variants, I am trying to move over to Zephyr for firmware.
+Build firmware:
+```bash
+cd zephyr_workspace/munin_app
+west build -p always -b xiao_ble/nrf52840/sense .
+```
 
-* BLE
-* IMU
+Deploy firmware:
+1. Double-click reset button on XIAO to enter bootloader mode
+2. Run: `./flash.sh` (or drag `build/zephyr/zephyr.uf2` to XIAO-SENSE drive)
+
+### Zephyr info 
+
+* BLE:
+* IMU: 
 * Battery: https://github.com/Tjoms99/xiao_sense_nrf52840_battery_lib
-
-### Arduino details
-
-https://wiki.seeedstudio.com/XIAO_BLE/
-https://forum.seeedstudio.com/t/xiao-sense-nrf52840-lets-get-to-the-bottom-of-this-mbed-vs-non-mbed-library-functionality-differences/276315
-https://forum.seeedstudio.com/t/xiao-ble-sense-cannot-communicate-with-imu-sensor/265629
 
 # Roadmap
 
@@ -118,7 +129,6 @@ https://forum.seeedstudio.com/t/xiao-ble-sense-cannot-communicate-with-imu-senso
 
 ## Munin device
 
-- Move all Zephyr artifacts into /munin_zephyr instead of root
 - Broadcast face change only on movement
 - Broadcast battery level periodically
 - Receive LED configuration from client 
