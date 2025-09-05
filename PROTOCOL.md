@@ -1,4 +1,4 @@
-# 🐦‍⬛ Munin Logging Protocol (v2.0)
+# 🐦‍⬛ Munin Logging Protocol (v2.1)
 
 ## Overview
 The Munin Logging Protocol defines how a Munin time-tracking device communicates activity logs over Bluetooth Low Energy (BLE) and optionally over Serial. The protocol supports:
@@ -6,6 +6,7 @@ The Munin Logging Protocol defines how a Munin time-tracking device communicates
 - Face switch tracking
 - Long-running face sessions  
 - Boot and shutdown events
+- Battery monitoring via standard BLE Battery Service
 - Disconnection tolerance
 - Receiving face color configuration from the client
 - Compact and efficient binary structure
@@ -33,6 +34,7 @@ Event types are represented as single-byte constants in the first field of the p
 | `0x01`       | Face Switch        | A new face is now facing up. Always has `delta_s = 0`    |
 | `0x02`       | Ongoing Log        | Time has elapsed on the same face                         |
 | `0x03`       | State Sync         | Connection state sync - device reports current face and accumulated time |
+| `0x04`       | Battery Status     | Battery voltage, percentage, and charging status update   |
 | `0x10`       | Boot               | Device powered on. Anchors device uptime. Will be rare.   |
 | `0x11`       | Shutdown           | Device is powering down (low battery or user-triggered)   |
 | `0x12`       | Low Battery        | Battery voltage below safe threshold                      |
@@ -43,6 +45,33 @@ Event types are represented as single-byte constants in the first field of the p
 | `0x21`       | BLE Disconnect     | Client disconnected or timeout                            |
 
 > Future event types may be added. Clients should ignore unknown event types gracefully.
+
+---
+
+## Battery Monitoring
+
+### Standard BLE Battery Service
+The device implements the standard **Bluetooth Battery Service (BAS)** for OS-level integration:
+- **Service UUID**: `0x180F` (Battery Service)
+- **Characteristic UUID**: `0x2A19` (Battery Level)
+- **Battery Level Status**: `0x2A1B` (includes charging state, power source, etc.)
+- **Battery Critical Status**: `0x2A1A` (critical battery warnings)
+
+This allows the operating system (macOS, iOS, Android, Windows) to automatically detect and display the Munin device's battery level in system UI, without requiring the Munin client app.
+
+### Custom Battery Events
+For detailed battery monitoring, the device also sends custom protocol events:
+
+#### Battery Status Event (`0x04`)
+Sent every 5 minutes to provide detailed battery information:
+- `delta_s`: Battery voltage encoded in 10mV units (e.g., 372 = 3720mV = 3.72V)
+- `face_id`: Battery percentage (0-100) in lower 7 bits + charging flag in MSB
+  - Bits 0-6: Battery percentage (0-100)
+  - Bit 7: Charging status (1 = charging, 0 = discharging)
+
+**Example**: `{0x04, 372, 0x95}` = 3.72V, 21% battery, charging (0x95 = 149 = 21 + 128)
+
+This custom event provides higher precision voltage readings and timing information not available through the standard BLE service.
 
 ---
 
@@ -66,6 +95,11 @@ Each face of the Munin cube is assigned an ID from 0 to 5. The mapping is define
 
 ## BLE Connection Behavior
 The device provides state synchronization when clients connect or reconnect:
+
+### Standard BLE Services
+The device advertises and provides these standard BLE services:
+- **Battery Service (0x180F)**: Standard battery level and status information
+- **Custom Munin Service**: Time tracking protocol and face configuration
 
 ### Connection State Sync
 When a BLE client connects, the device sends the current state:

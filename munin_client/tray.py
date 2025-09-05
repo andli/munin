@@ -248,12 +248,12 @@ def start_tray(enable_fake_device: bool = False):
                     icon_battery = "🪫"
                 
                 # Build battery status text
-                status_parts = [f"{icon_battery} Battery: {battery_level}%"]
-                
                 if is_charging:
-                    status_parts.append("(Charging)")
-                elif battery_level <= 15:
-                    status_parts.append("(Low)")
+                    status_parts = [f"{icon_battery} Battery: {battery_level}% - Charging"]
+                else:
+                    status_parts = [f"{icon_battery} Battery: {battery_level}%"]
+                    if battery_level <= 15:
+                        status_parts.append("(Low)")
                 
                 # Add voltage if available
                 if battery_voltage is not None:

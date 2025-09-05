@@ -9,12 +9,10 @@
 #define MUNIN_EVENT_FACE_SWITCH     0x01
 #define MUNIN_EVENT_ONGOING_LOG     0x02
 #define MUNIN_EVENT_STATE_SYNC      0x03
+#define MUNIN_EVENT_BATTERY_STATUS  0x04
 #define MUNIN_EVENT_BOOT            0x10
 #define MUNIN_EVENT_SHUTDOWN        0x11
 #define MUNIN_EVENT_LOW_BATTERY     0x12
-#define MUNIN_EVENT_CHARGING_START  0x13
-#define MUNIN_EVENT_CHARGING_FULL   0x14
-#define MUNIN_EVENT_CHARGING_STOP   0x15
 
 typedef struct {
     uint8_t event_type;

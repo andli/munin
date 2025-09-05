@@ -102,8 +102,7 @@ Using the xiao_ble_nrf52840_sense.dts board definition.
 
 Build firmware:
 ```bash
-cd zephyr_workspace/munin_app
-west build -p always -b xiao_ble/nrf52840/sense .
+cd ./zephyr_workspace && source zephyr/zephyr-env.sh && cd munin_app && west build -p always -b xiao_ble/nrf52840/sense .
 ```
 
 Deploy firmware:
@@ -124,11 +123,12 @@ Battery life is more important than detecting a face change quickly and moreover
 
 - ✅ Log face change to log file (CSV format as specified above) 
 - ✅ Handle device reconnection when connection is lost 
+- ✅ Test client app on Windows
 - Implement a Settings UI in system tray for:
   - LED colors
   - Face labels
   - preferred device selection/pairing
-- ✅ Test client app on Windows
+- Show current face in menu
 - Implement a basic view for time tracking statistics and reports
 - Add firmware update menu item and function
 
@@ -137,12 +137,11 @@ Battery life is more important than detecting a face change quickly and moreover
 - ✅ Get BLE working
 - ✅ Get IMU sensor working
 - ✅ Light up LED on face change 
+- ✅ Implement real battery voltage reading (ADC)
+- ✅ Broadcast battery level periodically
+- Add charging status detection and fix voltage being all wrong 
 - Receive LED configuration from client 
-- Get battery level working
 - Broadcast face change only on movement
-- Broadcast battery level periodically
-- Implement real battery voltage reading (ADC)
-- Add charging status detection 
 - Stronger LED than the builtin one needed - add an SK6812
 - Add firmware support for using the SK6812
 - Add on/off button and reset button

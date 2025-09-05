@@ -209,6 +209,13 @@ class BLEDeviceManager:
         """Update battery voltage (called by device event processing)"""
         self.battery_voltage = voltage
     
+    def update_battery_status(self, voltage_mv: int, percentage: int, is_charging: bool):
+        """Update complete battery status from device broadcast"""
+        self.battery_voltage = voltage_mv / 1000.0  # Convert mV to V
+        self.battery_level = percentage
+        self.is_charging = is_charging
+        logger.log_event(f"Battery status updated: {voltage_mv}mV ({percentage}%), {'charging' if is_charging else 'discharging'}")
+    
     def is_connected(self) -> bool:
         """Check if currently connected to a device"""
         if self.connected_device is None:

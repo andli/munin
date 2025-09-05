@@ -5,6 +5,7 @@
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/settings/settings.h>
+#include <zephyr/bluetooth/services/bas.h>
 
 #include "ble.h"
 #include "imu.h"

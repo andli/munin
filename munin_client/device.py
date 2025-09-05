@@ -72,6 +72,7 @@ class MuninDevice(ABC):
         # Standard BLE Battery Service
         self.BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb"
         self.BATTERY_LEVEL_CHAR_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
+        self.BATTERY_LEVEL_STATUS_CHAR_UUID = "00002a1b-0000-1000-8000-00805f9b34fb"
     
     @abstractmethod
     async def connect(self) -> bool:
@@ -125,6 +126,17 @@ class MuninDevice(ABC):
             # Don't log as a new face change, just update tracking state
             self.time_tracker.sync_current_face(log_entry.face_id, log_entry.delta_s)
             
+        elif log_entry.event_type == 0x04:  # Battery status event
+            # Decode battery status from packet
+            voltage_10mv = log_entry.delta_s  # Voltage in 10mV units
+            voltage_mv = voltage_10mv * 10    # Convert to mV
+            percentage = log_entry.face_id & 0x7F  # Lower 7 bits
+            is_charging = bool(log_entry.face_id & 0x80)  # MSB is charging flag
+            
+            logger.log_event(f"Battery status: {voltage_mv}mV, {percentage}%, {'charging' if is_charging else 'discharging'}")
+            if self.ble_manager:
+                self.ble_manager.update_battery_status(voltage_mv, percentage, is_charging)
+            
         elif log_entry.event_type == 0x10:  # Boot event
             logger.log_event("Device booted")
             
@@ -133,21 +145,6 @@ class MuninDevice(ABC):
             
         elif log_entry.event_type == 0x12:  # Low battery event
             logger.log_event(f"LOW BATTERY WARNING - device voltage below safe threshold")
-            
-        elif log_entry.event_type == 0x13:  # Charging started event
-            logger.log_event("CHARGING STARTED - USB power connected")
-            if self.ble_manager:
-                self.ble_manager.update_charging_status(True)
-            
-        elif log_entry.event_type == 0x14:  # Fully charged event
-            logger.log_event("FULLY CHARGED - battery charging complete")
-            if self.ble_manager:
-                self.ble_manager.update_charging_status(False)  # Charging complete
-            
-        elif log_entry.event_type == 0x15:  # Charging stopped event
-            logger.log_event("CHARGING STOPPED - USB power disconnected")
-            if self.ble_manager:
-                self.ble_manager.update_charging_status(False)
             
         elif log_entry.event_type == 0x20:  # BLE connect event
             logger.log_event("BLE client connected")
@@ -214,12 +211,31 @@ class RealMuninDevice(MuninDevice):
             services = self.client.services
             for service in services:
                 if service.uuid.lower() == self.BATTERY_SERVICE_UUID.lower():
+                    # Read battery level
                     battery_data = await self.client.read_gatt_char(self.BATTERY_LEVEL_CHAR_UUID)
                     if battery_data:
                         self.battery_level = int(battery_data[0])
+                        logger.log_event(f"Read battery level from BLE service: {self.battery_level}%")
+                        
+                        # Try to read charging status from Battery Level Status characteristic
+                        try:
+                            status_data = await self.client.read_gatt_char(self.BATTERY_LEVEL_STATUS_CHAR_UUID)
+                            if status_data and len(status_data) >= 1:
+                                # Battery Level Status format: bit 0-1 = battery charge state
+                                # 0 = unknown, 1 = charging, 2 = discharging active, 3 = discharging inactive
+                                charge_state = status_data[0] & 0x03
+                                is_charging = (charge_state == 1)  # 1 = charging
+                                
+                                # Update charging status in BLE manager
+                                self.ble_manager.update_charging_status(is_charging)
+                                logger.log_event(f"Read charging status from BLE service: {'charging' if is_charging else 'not charging'}")
+                        except Exception:
+                            # Battery Level Status characteristic not available - will use custom protocol events
+                            pass
+                        
                         return self.battery_level
             
-            logger.log_event("Device does not have battery service")
+            # No standard battery service found - battery data comes via custom protocol
             return None
         except Exception as e:
             logger.log_event(f"Error reading battery from real device: {e}")
@@ -445,7 +461,6 @@ class FakeMuninDevice(MuninDevice):
                         # Start charging
                         self.is_charging = True
                         self.charging_start_time = current_time
-                        self._send_protocol_packet(0x13, self.device_uptime_s)  # Charging started
                         logger.log_event("Fake device: Charging simulation started")
                     elif random.random() < 0.3:  # 30% chance to stop charging if already charging
                         # Stop charging
@@ -454,10 +469,8 @@ class FakeMuninDevice(MuninDevice):
                         self.charging_start_time = None
                         
                         if was_fully_charged:
-                            self._send_protocol_packet(0x14, self.device_uptime_s)  # Fully charged
                             logger.log_event("Fake device: Fully charged simulation")
                         else:
-                            self._send_protocol_packet(0x15, self.device_uptime_s)  # Charging stopped
                             logger.log_event("Fake device: Charging stopped simulation")
                 
                 # Simulate battery changes based on charging status
