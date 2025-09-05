@@ -12,22 +12,43 @@
 
 // Custom 128-bit UUIDs
 #define MUNIN_SVC_UUID    BT_UUID_128_ENCODE(0x6e400001, 0x8a3a, 0x11e5, 0x8994, 0xfeff819cdc9f)
-#define MUNIN_TX_UUID     BT_UUID_128_ENCODE(0x6e400002, 0x8a3a, 0x11e5, 0x8994, 0xfeff819cdc9f)
-#define MUNIN_LED_UUID    BT_UUID_128_ENCODE(0x6e400003, 0x8a3a, 0x11e5, 0x8994, 0xfeff819cdc9f)
+#define MUNIN_TX_UUID     BT_UUID_128_ENCODE(0x6e400002, 0x8a3a, 0x11e5, 0x8994, 0xfeff819cdc9f) /* Generic data / legacy */
+#define MUNIN_LED_UUID    BT_UUID_128_ENCODE(0x6e400003, 0x8a3a, 0x11e5, 0x8994, 0xfeff819cdc9f) /* Placeholder write */
+#define MUNIN_FACE_UUID   BT_UUID_128_ENCODE(0x6e400004, 0x8a3a, 0x11e5, 0x8994, 0xfeff819cdc9f) /* New face notify */
 
-static struct bt_uuid_128 svc_uuid = BT_UUID_INIT_128(MUNIN_SVC_UUID);
-static struct bt_uuid_128 tx_uuid  = BT_UUID_INIT_128(MUNIN_TX_UUID);
-static struct bt_uuid_128 led_uuid = BT_UUID_INIT_128(MUNIN_LED_UUID);
+static struct bt_uuid_128 svc_uuid  = BT_UUID_INIT_128(MUNIN_SVC_UUID);
+static struct bt_uuid_128 tx_uuid   = BT_UUID_INIT_128(MUNIN_TX_UUID);
+static struct bt_uuid_128 led_uuid  = BT_UUID_INIT_128(MUNIN_LED_UUID);
+static struct bt_uuid_128 face_uuid = BT_UUID_INIT_128(MUNIN_FACE_UUID);
 
 static struct bt_conn *s_conn;
-static uint8_t tx_value[8];
+static uint8_t tx_value[8]; /* small generic buffer */
+static uint8_t face_value;  /* last notified face */
 static bool ble_connected;
 static bool ble_advertising;
+static bool face_notif_enabled; /* client subscribed */
+
+/* Attribute index map (order produced by BT_GATT_SERVICE_DEFINE) */
+#define MUNIN_SVC_ATTR_PRIMARY     0
+#define MUNIN_SVC_ATTR_TX_DECL     1
+#define MUNIN_SVC_ATTR_TX_VALUE    2
+#define MUNIN_SVC_ATTR_TX_CCC      3
+#define MUNIN_SVC_ATTR_FACE_DECL   4
+#define MUNIN_SVC_ATTR_FACE_VALUE  5
+#define MUNIN_SVC_ATTR_FACE_CCC    6
+#define MUNIN_SVC_ATTR_LED_DECL    7
+#define MUNIN_SVC_ATTR_LED_VALUE   8
 
 static ssize_t read_tx(struct bt_conn *conn, const struct bt_gatt_attr *attr,
                        void *buf, uint16_t len, uint16_t offset)
 {
     return bt_gatt_attr_read(conn, attr, buf, len, offset, tx_value, sizeof(tx_value));
+}
+
+static ssize_t read_face(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                         void *buf, uint16_t len, uint16_t offset)
+{
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &face_value, sizeof(face_value));
 }
 
 static ssize_t write_led(struct bt_conn *conn, const struct bt_gatt_attr *attr,
@@ -36,18 +57,33 @@ static ssize_t write_led(struct bt_conn *conn, const struct bt_gatt_attr *attr,
     ARG_UNUSED(conn); ARG_UNUSED(attr); ARG_UNUSED(flags);
     if (offset != 0) return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
     if (len == 4) {
-        // face_id, r, g, b (not yet used)
+        /* TODO: parse face + RGB for LED control */
     }
     return len;
 }
 
+/* CCC callback for face notifications */
+static void face_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value)
+{
+    face_notif_enabled = (value == BT_GATT_CCC_NOTIFY);
+    printk("[BLE] Face notifications %s\n", face_notif_enabled ? "ENABLED" : "DISABLED");
+}
+
 BT_GATT_SERVICE_DEFINE(munin_svc,
     BT_GATT_PRIMARY_SERVICE(&svc_uuid),
+    /* Generic tiny data characteristic (legacy) */
     BT_GATT_CHARACTERISTIC(&tx_uuid.uuid,
         BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
         BT_GATT_PERM_READ,
         read_tx, NULL, tx_value),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    /* Face state characteristic: read current face & subscribe */
+    BT_GATT_CHARACTERISTIC(&face_uuid.uuid,
+        BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
+        BT_GATT_PERM_READ,
+        read_face, NULL, &face_value),
+    BT_GATT_CCC(face_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    /* LED control placeholder */
     BT_GATT_CHARACTERISTIC(&led_uuid.uuid,
         BT_GATT_CHRC_WRITE,
         BT_GATT_PERM_WRITE,
@@ -155,7 +191,14 @@ int munin_ble_send_data(const uint8_t *data, size_t length)
     if (!ble_connected || !s_conn || length == 0) return -1;
     if (length > sizeof(tx_value)) length = sizeof(tx_value);
     memcpy(tx_value, data, length);
-    return bt_gatt_notify(s_conn, &munin_svc.attrs[1], tx_value, length);
+    return bt_gatt_notify(s_conn, &munin_svc.attrs[MUNIN_SVC_ATTR_TX_VALUE], tx_value, length);
+}
+
+int munin_ble_notify_face(uint8_t face_id)
+{
+    if (!ble_connected || !s_conn || !face_notif_enabled) return -1;
+    face_value = face_id;
+    return bt_gatt_notify(s_conn, &munin_svc.attrs[MUNIN_SVC_ATTR_FACE_VALUE], &face_value, sizeof(face_value));
 }
 
 bool munin_ble_is_connected(void)

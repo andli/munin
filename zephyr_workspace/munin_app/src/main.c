@@ -10,6 +10,8 @@
 #include "imu.h"
 #include "battery.h"
 #include "munin_protocol.h"
+#include "led_config.h"
+#include "led_effects.h"
 
 /* Use the red LED (led0) */
 #define LED0_NODE DT_ALIAS(led0)
@@ -41,10 +43,14 @@ int main(void)
 
 	if (!gpio_is_ready_dt(&red_led)) {
 		printk("LED not ready\n");
-		return -1;
+	} else {
+		ret = gpio_pin_configure_dt(&red_led, GPIO_OUTPUT_ACTIVE);
+		if (ret) printk("Legacy LED configure failed: %d\n", ret);
 	}
-	ret = gpio_pin_configure_dt(&red_led, GPIO_OUTPUT_ACTIVE);
-	if (ret) return ret;
+
+	if (munin_led_effects_init()) {
+		printk("LED effects init failed\n");
+	}
 
 	if (console && device_is_ready(console)) {
 		wait_for_dtr(console);
@@ -69,20 +75,14 @@ int main(void)
 	bool led = true;
 	int counter = 0;
 	while (1) {
-		// Show face-based LED behavior (less annoying)
 		uint8_t current_face = munin_imu_get_current_face();
-		if (current_face == 0) {
-			// Face 0 (unknown/flat) - slow blink (once every 2 seconds)
-			if ((counter % 4) == 0) {
-				led = !led;
-			}
-			gpio_pin_set_dt(&red_led, (int)led);
-		} else {
-			// For detected faces 1-6, show solid LED (no blinking)
-			gpio_pin_set_dt(&red_led, 1);
-		}
-		
-		printk("tick %d face=%u batt=%u%% conn=%d adv=%d\n", counter++, current_face,
+		const munin_rgb_t *colors = munin_led_get_face_colors();
+		munin_rgb_t c = colors[(current_face ? current_face : 1) - 1];
+
+		munin_led_effects_update();
+
+		printk("tick %d face=%u color=%u,%u,%u batt=%u%% conn=%d adv=%d\n", counter++, current_face,
+			   c.r, c.g, c.b,
 			   munin_battery_get_percentage(), munin_ble_is_connected(), munin_ble_is_advertising());
 
 		munin_battery_update();

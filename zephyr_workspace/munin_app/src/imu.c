@@ -1,5 +1,6 @@
 #include "imu.h"
 #include "munin_protocol.h"
+#include "led_effects.h"
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/sensor.h>
@@ -216,6 +217,10 @@ void munin_imu_update(void)
                         munin_packet_t pkt;
                         munin_protocol_create_packet(&pkt, MUNIN_EVENT_FACE_SWITCH, 0, s_face);
                         munin_protocol_send_packet(&pkt);
+                        munin_led_face_flash(s_face);
+                        /* Attempt BLE notify (ignore errors silently) */
+                        extern int munin_ble_notify_face(uint8_t face_id);
+                        (void)munin_ble_notify_face(s_face);
                     }
                 }
             }

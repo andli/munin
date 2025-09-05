@@ -18,6 +18,7 @@ The device consists of a 3d printed translucent enclosure, a single board for co
 - 3D-printed translucent enclosure (STL to come)
 - Seeed XIAO nRF52840 Sense — BLE + IMU + USB-C microcontroller
 - LiPo battery (3.7 V, EEMB 803030 with PCM)
+- RGBW LED; SK6812 mini
 
 Total cost of components is something like 40€ at the moment. Could be lowered significantly but that would make assembly much more cumbersome.
 
@@ -97,6 +98,8 @@ Or with pipx:
 
 ### Firmware Development
 
+Using the xiao_ble_nrf52840_sense.dts board definition.
+
 Build firmware:
 ```bash
 cd zephyr_workspace/munin_app
@@ -109,21 +112,23 @@ Deploy firmware:
 
 ### Zephyr info 
 
-* BLE:
-* IMU: 
+Battery life is more important than detecting a face change quickly and moreover the Munin should not change face that easily in case one accidentally rotate it or fiddle with it.
+
 * Battery: https://github.com/Tjoms99/xiao_sense_nrf52840_battery_lib
+* IMU: https://devzone.nordicsemi.com/f/nordic-q-a/109732/running-the-lsm6dls-imu-zephyr-example-with-nrf52840-based-xiao-ble-sense
+
 
 # Roadmap
 
 ## Client app
 
-- ✅ ~~Log face change to log file (CSV format as specified above)~~ 
-- ✅ ~~Handle device reconnection when connection is lost~~ 
+- ✅ Log face change to log file (CSV format as specified above) 
+- ✅ Handle device reconnection when connection is lost 
 - Implement a Settings UI in system tray for:
   - LED colors
   - Face labels
   - preferred device selection/pairing
-- ✅ ~~Test client app on Windows~~
+- ✅ Test client app on Windows
 - Implement a basic view for time tracking statistics and reports
 - Add firmware update menu item and function
 
@@ -131,14 +136,15 @@ Deploy firmware:
 
 - ✅ Get BLE working
 - ✅ Get IMU sensor working
-- Light up LED on face change 
+- ✅ Light up LED on face change 
 - Receive LED configuration from client 
 - Get battery level working
 - Broadcast face change only on movement
 - Broadcast battery level periodically
 - Implement real battery voltage reading (ADC)
 - Add charging status detection 
-- Stronger LED than the builtin one needed - add a WS2812B NeoPixel
+- Stronger LED than the builtin one needed - add an SK6812
+- Add firmware support for using the SK6812
 - Add on/off button and reset button
 - Power saving mode - "sleep" and wake on movement
 - Optimize BLE connection parameters for battery life
