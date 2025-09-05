@@ -68,6 +68,7 @@ class MuninDevice(ABC):
         self.MUNIN_SERVICE_UUID = "6e400001-8a3a-11e5-8994-feff819cdc9f"
         self.MUNIN_LOG_CHAR_UUID = "6e400002-8a3a-11e5-8994-feff819cdc9f"
         self.MUNIN_LED_CONFIG_CHAR_UUID = "6e400003-8a3a-11e5-8994-feff819cdc9f"
+        self.MUNIN_FACE_CHAR_UUID = "6e400004-8a3a-11e5-8994-feff819cdc9f"
         
         # Standard BLE Battery Service
         self.BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb"
@@ -259,7 +260,7 @@ class RealMuninDevice(MuninDevice):
             return False
     
     async def _setup_log_notifications(self):
-        """Setup notifications for log entries"""
+        """Setup notifications for log entries and face changes"""
         try:
             # Check if device has Munin service
             services = self.client.services
@@ -268,11 +269,59 @@ class RealMuninDevice(MuninDevice):
                     # Setup notification handler for log characteristic
                     await self.client.start_notify(self.MUNIN_LOG_CHAR_UUID, self._log_notification_handler)
                     logger.log_event("Setup log notifications for real Munin device")
+                    
+                    # Setup notification handler for face characteristic  
+                    try:
+                        await self.client.start_notify(self.MUNIN_FACE_CHAR_UUID, self._face_notification_handler)
+                        logger.log_event("Setup face notifications for real Munin device")
+                        
+                        # Read current face immediately after enabling notifications
+                        current_face_data = await self.client.read_gatt_char(self.MUNIN_FACE_CHAR_UUID)
+                        if current_face_data and len(current_face_data) > 0:
+                            current_face = int(current_face_data[0])
+                            logger.log_event(f"Read current face on connect: {current_face}")
+                            
+                            # Initialize time tracker with current face
+                            if not self.is_reconnecting:
+                                self.time_tracker.log_face_change(current_face)
+                            else:
+                                # Reconnection - resume if same face
+                                self.time_tracker.resume_session_if_same_face(current_face)
+                                self.is_reconnecting = False
+                            
+                    except Exception as e:
+                        logger.log_event(f"Could not setup face notifications (older firmware?): {e}")
+                    
                     return
             
             logger.log_event("Real device does not have Munin service")
         except Exception as e:
             logger.log_event(f"Error setting up notifications: {e}")
+    
+    def _face_notification_handler(self, sender, data: bytearray):
+        """Handle incoming face change notifications"""
+        try:
+            if len(data) == 1:
+                face_id = int(data[0])
+                logger.log_event(f"Received face notification: face {face_id}", "debug")
+                
+                # Process face change
+                self.time_tracker.log_face_change(face_id)
+                
+                # Also log to regular logger
+                try:
+                    from munin_client.config import MuninConfig
+                    config = MuninConfig()
+                    face_label = config.get_face_label(face_id)
+                except Exception:
+                    face_label = f"Face {face_id}"
+                
+                logger.log_face_change(face_id, face_label)
+            else:
+                logger.log_event(f"Received invalid face notification: {len(data)} bytes", "debug")
+                
+        except Exception as e:
+            logger.log_event(f"Error parsing face notification: {e}")
     
     def _log_notification_handler(self, sender, data: bytearray):
         """Handle incoming log notifications"""

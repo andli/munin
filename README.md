@@ -128,7 +128,7 @@ Battery life is more important than detecting a face change quickly and moreover
   - LED colors
   - Face labels
   - preferred device selection/pairing
-- Show current face in menu
+- ✅ Show current face in menu
 - Implement a basic view for time tracking statistics and reports
 - Add firmware update menu item and function
 

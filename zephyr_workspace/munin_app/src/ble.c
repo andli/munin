@@ -48,6 +48,9 @@ static ssize_t read_tx(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 static ssize_t read_face(struct bt_conn *conn, const struct bt_gatt_attr *attr,
                          void *buf, uint16_t len, uint16_t offset)
 {
+    /* Always return the current face from IMU */
+    extern uint8_t munin_imu_get_current_face(void);
+    face_value = munin_imu_get_current_face();
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &face_value, sizeof(face_value));
 }
 
@@ -67,6 +70,12 @@ static void face_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value
 {
     face_notif_enabled = (value == BT_GATT_CCC_NOTIFY);
     printk("[BLE] Face notifications %s\n", face_notif_enabled ? "ENABLED" : "DISABLED");
+    
+    /* When notifications are enabled, send current face after a short delay */
+    if (face_notif_enabled && ble_connected && s_conn) {
+        /* We'll send the current face in munin_ble_update() or a separate function */
+        printk("[BLE] Will send current face on next update\n");
+    }
 }
 
 BT_GATT_SERVICE_DEFINE(munin_svc,
@@ -178,12 +187,36 @@ int munin_ble_init(void)
     }
     ble_advertising = true;
     printk("[BLE] Advertising started\n");
+    
+    /* Initialize face value with current face */
+    extern uint8_t munin_imu_get_current_face(void);
+    face_value = munin_imu_get_current_face();
+    printk("[BLE] Initialized with current face: %u\n", face_value);
+    
     return 0;
 }
 
 void munin_ble_update(void)
 {
-    // Future periodic tasks (e.g., notify sensor data)
+    /* Send current face if notifications just got enabled */
+    static bool sent_initial_face = false;
+    if (face_notif_enabled && ble_connected && s_conn && !sent_initial_face) {
+        extern uint8_t munin_imu_get_current_face(void);
+        uint8_t current_face = munin_imu_get_current_face();
+        if (current_face > 0) {
+            face_value = current_face;
+            int ret = bt_gatt_notify(s_conn, &munin_svc.attrs[MUNIN_SVC_ATTR_FACE_VALUE], &face_value, sizeof(face_value));
+            if (ret == 0) {
+                printk("[BLE] Sent current face on notification enable: %u\n", current_face);
+                sent_initial_face = true;
+            }
+        }
+    }
+    
+    /* Reset flag when notifications are disabled */
+    if (!face_notif_enabled) {
+        sent_initial_face = false;
+    }
 }
 
 int munin_ble_send_data(const uint8_t *data, size_t length)

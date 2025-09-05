@@ -264,11 +264,50 @@ def start_tray(enable_fake_device: bool = False):
                 return "🔋 Battery: Unknown"
         return None
     
+    def get_current_face_text():
+        """Get current face information for menu"""
+        if ble_manager.is_connected() and ble_manager.connected_device:
+            # Get current face from time tracker
+            current_face = ble_manager.connected_device.time_tracker.current_face
+            if current_face is not None:
+                try:
+                    face_label = config.get_face_label(current_face)
+                    face_color = config.get_face_color(current_face)
+                    
+                    # Create a visual representation of the color
+                    # Use colored circle emoji or square as color indicator
+                    if face_color['r'] > 200 and face_color['g'] < 100 and face_color['b'] < 100:
+                        color_icon = "🔴"  # Red
+                    elif face_color['g'] > 200 and face_color['r'] < 100 and face_color['b'] < 100:
+                        color_icon = "🟢"  # Green
+                    elif face_color['b'] > 200 and face_color['r'] < 100 and face_color['g'] < 100:
+                        color_icon = "🔵"  # Blue
+                    elif face_color['r'] > 200 and face_color['g'] > 200 and face_color['b'] < 100:
+                        color_icon = "🟡"  # Yellow
+                    elif face_color['r'] > 200 and face_color['b'] > 200 and face_color['g'] < 100:
+                        color_icon = "🟣"  # Purple/Magenta
+                    elif face_color['r'] > 100 and face_color['g'] > 100 and face_color['b'] > 100:
+                        color_icon = "⚪"  # White/Gray
+                    else:
+                        color_icon = "🟤"  # Brown/Other
+                    
+                    return f"{color_icon} Current: {face_label}"
+                except Exception:
+                    return f"🎲 Current: Face {current_face}"
+            else:
+                return "🎲 Current: Unknown"
+        return None
+    
     # Create dynamic menu
     def create_menu():
         menu_items = [
             MenuItem(get_status_text(), None, enabled=False),  # Status (non-clickable)
         ]
+        
+        # Add current face if connected
+        current_face_text = get_current_face_text()
+        if current_face_text:
+            menu_items.append(MenuItem(current_face_text, None, enabled=False))
         
         # Add battery status if connected
         battery_text = get_battery_text()
