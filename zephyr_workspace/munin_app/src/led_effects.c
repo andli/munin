@@ -3,6 +3,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/device.h>
+#include "debug.h"
 
 /* The devicetree node identifiers for all RGB LEDs */
 #define LED0_NODE DT_ALIAS(led0)  /* Red LED */
@@ -79,7 +80,7 @@ int munin_led_effects_init(void)
     printk("LED: Successfully configured all RGB LEDs\n");
     
     /* Test the RGB LEDs with a quick color sequence */
-    printk("LED: Testing RGB sequence...\n");
+    MLOG("LED: Testing RGB sequence...\n");
     
     /* Red */
     set_led_color(1, true);  /* Face 1 = Red */
@@ -96,21 +97,21 @@ int munin_led_effects_init(void)
     k_sleep(K_MSEC(300));
     set_led_color(3, false);
     
-    printk("LED: RGB test complete\n");
+    MLOG("LED: RGB test complete\n");
     
     return 0;
 }
 
 void munin_led_face_flash(uint8_t face_id)
 {
-    printk("LED: Starting flash for face %d at %lld ms\n", face_id, k_uptime_get());
+    MLOG("LED: Flash start face=%d t=%lld\n", face_id, k_uptime_get());
     s_flash.active = 1;
     s_flash.start_ms = k_uptime_get();
     s_flash.face = face_id;
     
     /* Turn on the LED with face color */
     set_led_color(face_id, true);
-    printk("LED: Set color for face %d\n", face_id);
+    MLOG("LED: Set color face=%d\n", face_id);
 }
 
 void munin_led_effects_update(void)
@@ -123,7 +124,7 @@ void munin_led_effects_update(void)
     if (elapsed >= FLASH_TOTAL_MS) {
         s_flash.active = 0;
         set_led_color(s_flash.face, false);  /* Turn OFF all LEDs */
-        printk("LED: Flash ended at %lld ms (duration %lld ms)\n", now, elapsed);
+    MLOG("LED: Flash end t=%lld dur=%lld\n", now, elapsed);
         return;
     }
     

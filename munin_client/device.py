@@ -155,146 +155,113 @@ class MuninDevice(ABC):
             
         # TODO: Handle other event types if needed in the future
 
-class RealMuninDevice(MuninDevice):
-    """Real Munin BLE device implementation"""
-    
+class MuninDeviceImpl(MuninDevice):
+    """Concrete BLE Munin device implementation (formerly RealMuninDevice)"""
+
     def __init__(self, name: str, address: str, client, ble_manager=None):
         super().__init__(name, address, ble_manager)
         self.client = client
-    
+
     async def connect(self) -> bool:
-        """Connect to the real device"""
+        """Connect to the device"""
         try:
             if not self.client.is_connected:
                 await self.client.connect()
-            
+
             if self.client.is_connected:
                 self.is_connected_flag = True
-                
-                # Check if this is a reconnection (time tracker has a current session)
+
                 if self.time_tracker.current_face is not None:
                     self.is_reconnecting = True
-                    logger.log_event(f"Reconnected to real Munin device: {self.name}")
+                    logger.log_event(f"Reconnected to Munin device: {self.name}")
                 else:
-                    logger.log_event(f"Connected to real Munin device: {self.name}")
-                
-                # Subscribe to log notifications if available
+                    logger.log_event(f"Connected to Munin device: {self.name}")
+
                 await self._setup_log_notifications()
-                
                 return True
             return False
         except Exception as e:
-            logger.log_event(f"Error connecting to real device {self.name}: {e}")
+            logger.log_event(f"Error connecting to device {self.name}: {e}")
             return False
-    
+
     async def disconnect(self, is_temporary: bool = False):
-        """Disconnect from the real device"""
+        """Disconnect from the device"""
         try:
-            # Finalize current time tracking session
             if not is_temporary:
                 self.time_tracker.finalize_current_session(is_temporary=False)
-            
+
             if self.client.is_connected:
                 await self.client.disconnect()
             self.is_connected_flag = False
-            logger.log_event(f"Disconnected from real Munin device: {self.name}" + 
-                           (" (temporary)" if is_temporary else ""))
+            logger.log_event(f"Disconnected from Munin device: {self.name}" + (" (temporary)" if is_temporary else ""))
         except Exception as e:
-            logger.log_event(f"Error disconnecting from real device: {e}")
-    
+            logger.log_event(f"Error disconnecting from device: {e}")
+
     async def read_battery_level(self) -> Optional[int]:
-        """Read battery level from real device"""
+        """Read battery level from device"""
         try:
             if not self.is_connected():
                 return None
-            
-            # Check if device has battery service
+
             services = self.client.services
             for service in services:
                 if service.uuid.lower() == self.BATTERY_SERVICE_UUID.lower():
-                    # Read battery level
                     battery_data = await self.client.read_gatt_char(self.BATTERY_LEVEL_CHAR_UUID)
                     if battery_data:
                         self.battery_level = int(battery_data[0])
                         logger.log_event(f"Read battery level from BLE service: {self.battery_level}%")
-                        
-                        # Try to read charging status from Battery Level Status characteristic
                         try:
                             status_data = await self.client.read_gatt_char(self.BATTERY_LEVEL_STATUS_CHAR_UUID)
                             if status_data and len(status_data) >= 1:
-                                # Battery Level Status format: bit 0-1 = battery charge state
-                                # 0 = unknown, 1 = charging, 2 = discharging active, 3 = discharging inactive
                                 charge_state = status_data[0] & 0x03
-                                is_charging = (charge_state == 1)  # 1 = charging
-                                
-                                # Update charging status in BLE manager
+                                is_charging = (charge_state == 1)
                                 self.ble_manager.update_charging_status(is_charging)
-                                logger.log_event(f"Read charging status from BLE service: {'charging' if is_charging else 'not charging'}")
+                                logger.log_event(f"Read charging status: {'charging' if is_charging else 'not charging'}")
                         except Exception:
-                            # Battery Level Status characteristic not available - will use custom protocol events
                             pass
-                        
                         return self.battery_level
-            
-            # No standard battery service found - battery data comes via custom protocol
             return None
         except Exception as e:
-            logger.log_event(f"Error reading battery from real device: {e}")
+            logger.log_event(f"Error reading battery: {e}")
             return None
-    
+
     async def send_face_config(self, face_configs: List[FaceConfig]) -> bool:
-        """Send face configuration to real device"""
+        """Send face configuration to device"""
         try:
             if not self.is_connected():
                 return False
-            
-            # Send each face config as a 4-byte packet
             for config in face_configs:
                 packet = config.to_packet()
                 await self.client.write_gatt_char(self.MUNIN_LED_CONFIG_CHAR_UUID, packet)
-                #logger.log_event(f"Sent face config for face {config.face_id}: RGB({config.r},{config.g},{config.b})")
-            
             return True
         except Exception as e:
-            logger.log_event(f"Error sending face config to real device: {e}")
+            logger.log_event(f"Error sending face config: {e}")
             return False
-    
+
     async def _setup_log_notifications(self):
-        """Setup notifications for log entries and face changes"""
+        """Setup notifications for log and face changes"""
         try:
-            # Check if device has Munin service
             services = self.client.services
             for service in services:
                 if service.uuid.lower() == self.MUNIN_SERVICE_UUID.lower():
-                    # Setup notification handler for log characteristic
                     await self.client.start_notify(self.MUNIN_LOG_CHAR_UUID, self._log_notification_handler)
-                    logger.log_event("Setup log notifications for real Munin device")
-                    
-                    # Setup notification handler for face characteristic  
+                    logger.log_event("Enabled log notifications")
                     try:
                         await self.client.start_notify(self.MUNIN_FACE_CHAR_UUID, self._face_notification_handler)
-                        logger.log_event("Setup face notifications for real Munin device")
-                        
-                        # Read current face immediately after enabling notifications
+                        logger.log_event("Enabled face notifications")
                         current_face_data = await self.client.read_gatt_char(self.MUNIN_FACE_CHAR_UUID)
                         if current_face_data and len(current_face_data) > 0:
                             current_face = int(current_face_data[0])
                             logger.log_event(f"Read current face on connect: {current_face}")
-                            
-                            # Initialize time tracker with current face
                             if not self.is_reconnecting:
                                 self.time_tracker.log_face_change(current_face)
                             else:
-                                # Reconnection - resume if same face
                                 self.time_tracker.resume_session_if_same_face(current_face)
                                 self.is_reconnecting = False
-                            
                     except Exception as e:
                         logger.log_event(f"Could not setup face notifications (older firmware?): {e}")
-                    
                     return
-            
-            logger.log_event("Real device does not have Munin service")
+            logger.log_event("Device missing Munin service")
         except Exception as e:
             logger.log_event(f"Error setting up notifications: {e}")
     

@@ -1,0 +1,30 @@
+{
+  "preferred_device_name": null,
+  "preferred_mac_address": null,
+  "face_labels": {
+    "1": "Emails",
+    "2": "Coding",
+    "3": "Meetings",
+    "4": "Planning",
+    "5": "Break",
+    "6": "Off"
+  },
+  "face_colors": {
+    "1": {"r": 255, "g": 0, "b": 0},
+    "2": {"r": 0, "g": 255, "b": 0},
+    "3": {"r": 0, "g": 0, "b": 255},
+    "4": {"r": 255, "g": 255, "b": 0},
+    "5": {"r": 255, "g": 0, "b": 255},
+    "6": {"r": 128, "g": 128, "b": 128}
+  },
+  "activity_summary": {
+    "monthly_start_date": 1,
+    "show_percentages": false,
+    "time_format": "hours"
+  },
+  "ui_preferences": {
+    "show_notifications": true,
+    "minimize_to_tray": true,
+    "auto_connect": true
+  }
+}

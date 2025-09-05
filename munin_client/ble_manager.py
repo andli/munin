@@ -4,7 +4,7 @@ import bleak
 from bleak import BleakScanner, BleakClient
 from munin_client.logger import MuninLogger
 from munin_client.config import MuninConfig
-from munin_client.device import MuninDevice, RealMuninDevice, FakeMuninDevice
+from munin_client.device import MuninDevice, MuninDeviceImpl, FakeMuninDevice
 
 logger = MuninLogger()
 
@@ -128,7 +128,7 @@ class BLEDeviceManager:
             
             if self.client.is_connected:
                 # Create real device wrapper
-                real_munin = RealMuninDevice(name or "Unknown", address, self.client, ble_manager=self)
+                real_munin = MuninDeviceImpl(name or "Unknown", address, self.client, ble_manager=self)
                 if await real_munin.connect():
                     self.connected_device = real_munin
                     self.battery_level = await real_munin.read_battery_level()

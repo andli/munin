@@ -7,6 +7,7 @@
 #include <zephyr/device.h>
 #include <zephyr/bluetooth/services/bas.h>
 #include <hal/nrf_saadc.h>
+#include "debug.h"
 
 /* ADC configuration for battery voltage reading */
 #define ADC_NODE DT_NODELABEL(adc)
@@ -44,35 +45,13 @@ static bool s_chg = false;
  */
 static uint8_t voltage_to_percentage(uint16_t mv, bool is_charging)
 {
-    /* When charging and voltage is very high, it might be reading USB voltage through the circuit
-     * For XIAO BLE Sense, when USB is connected, the voltage reading can be unreliable
-     * But we should still try to read the actual battery voltage first
-     */
-    
-    /* LiPo voltage curve for actual battery (empirically measured):
-     * 3.62V = 100% (fully charged - measured)
-     * 3.55V = 90%
-     * 3.50V = 75%
-     * 3.45V = 60%
-     * 3.40V = 45%
-     * 3.35V = 30%
-     * 3.30V = 20%
-     * 3.25V = 10%
-     * 3.20V = 5%
-     * 3.00V = 0%   (cutoff voltage)
-     */
-    if (mv >= 3620) return 100;
-    if (mv >= 3550) return 90;
-    if (mv >= 3500) return 75;
-    if (mv >= 3450) return 60;
-    if (mv >= 3400) return 45;
-    if (mv >= 3350) return 30;
-    if (mv >= 3300) return 20;
-    if (mv >= 3250) return 10;
-    if (mv >= 3200) return 5;
-    if (mv >= 3000) return 0;
-    
-    /* If voltage is extremely low, it might be a measurement error */
+    ARG_UNUSED(is_charging);
+    static const struct { uint16_t mv; uint8_t pct; } table[] = {
+        {3620,100},{3550,90},{3500,75},{3450,60},{3400,45},{3350,30},{3300,20},{3250,10},{3200,5},{3000,0}
+    };
+    for (size_t i = 0; i < (sizeof(table)/sizeof(table[0])); i++) {
+        if (mv >= table[i].mv) return table[i].pct;
+    }
     return 0;
 }
 
@@ -118,8 +97,7 @@ static int read_battery_voltage(uint16_t *mv)
     *mv = (uint16_t)(vbat_calibrated * 1000);  /* Convert to millivolts */
     
     /* Debug output to understand ADC readings */
-    printk("Battery: ADC raw=%d (avg of %d), uncalibrated=%dmV, calibrated=%dmV\n", 
-           (int)avg_raw, num_samples, (int)(vbat_raw * 1000), (int)*mv);
+    MLOG("Battery: raw=%d avg_of=%d uncal=%dmV cal=%dmV\n", (int)avg_raw, num_samples, (int)(vbat_raw * 1000), (int)*mv);
 
     return 0;
 }
@@ -183,11 +161,11 @@ int munin_battery_init(void)
         s_mv = mv;
         s_chg = read_charging_status();
         s_pct = voltage_to_percentage(mv, s_chg);
-        printk("Battery: Initial voltage=%dmV, percentage=%d%%\n", s_mv, s_pct);
+        printk("Battery: %dmV %d%% (%s)\n", s_mv, s_pct, s_chg?"chg":"disc");
     }
 
     s_chg = read_charging_status();
-    printk("Battery: Initial charging status=%s\n", s_chg ? "charging" : "not charging");
+    MLOG("Battery: Initial charging status=%s\n", s_chg ? "charging" : "not charging");
 
     /* Initialize BLE Battery Service */
     bt_bas_set_battery_level(s_pct);
@@ -224,40 +202,74 @@ void munin_battery_update(void)
     if (chg_new != s_chg) {
         s_chg = chg_new;
         if (s_chg) {
-            printk("Battery: CHARGING STARTED - USB power connected\n");
+        printk("Battery: Charging started\n");
         } else {
-            printk("Battery: CHARGING STOPPED - USB power disconnected\n");
+            printk("Battery: Charging stopped\n");
         }
         
         /* Note: Advanced BLE Battery Service charging state features not available in this Zephyr version */
     }
 
-    /* Check for low battery condition (only when not charging) - 5% threshold */
-    if (s_mv <= 3200 && !s_chg) {
-        printk("Battery: LOW BATTERY WARNING - device voltage below safe threshold\n");
+    static bool low_sent = false;
+    static bool full_sent = false;
+    const uint16_t LOW_THRESH_MV = 3200;
+    const uint16_t FULL_THRESH_MV = 4170; /* Consider ~4.17V effectively full */
+
+    /* Charging transition events */
+    if (chg_new != s_chg) {
+        bool was_charging = s_chg;
+        s_chg = chg_new;
         munin_packet_t pkt;
-    /* TODO: Define dedicated low battery event; using BOOT (0x10) placeholder to avoid build error */
-    munin_protocol_create_packet(&pkt, MUNIN_EVENT_BOOT, 0, 0);
-        munin_protocol_send_packet(&pkt);
+        if (s_chg) {
+            /* Charging started */
+            munin_protocol_create_packet(&pkt, MUNIN_EVENT_CHARGING_STARTED, 0, 0);
+            munin_protocol_send_packet(&pkt);
+            printk("Battery: Charging started\n");
+            full_sent = false; /* allow new full notification */
+        } else {
+            munin_protocol_create_packet(&pkt, MUNIN_EVENT_CHARGING_STOPPED, 0, 0);
+            munin_protocol_send_packet(&pkt);
+            printk("Battery: Charging stopped\n");
+        }
+    }
+
+    /* Low battery one-shot (until voltage rises above hysteresis) */
+    if (!s_chg && s_mv <= LOW_THRESH_MV) {
+        if (!low_sent) {
+            munin_packet_t pkt;
+            munin_protocol_create_packet(&pkt, MUNIN_EVENT_LOW_BATTERY, s_mv/10, s_pct);
+            munin_protocol_send_packet(&pkt);
+            printk("Battery: LOW BATTERY (<=%dmV) %dmV %d%%\n", LOW_THRESH_MV, s_mv, s_pct);
+            low_sent = true;
+        }
+    } else if (s_mv > (LOW_THRESH_MV + 80)) { /* ~80mV hysteresis */
+        low_sent = false;
+    }
+
+    /* Full battery (while charging) */
+    if (s_chg && s_mv >= FULL_THRESH_MV) {
+        if (!full_sent) {
+            munin_packet_t pkt;
+            munin_protocol_create_packet(&pkt, MUNIN_EVENT_FULLY_CHARGED, s_mv/10, s_pct);
+            munin_protocol_send_packet(&pkt);
+            printk("Battery: Fully charged (%dmV)\n", s_mv);
+            full_sent = true;
+        }
     }
 
     /* Broadcast battery status every 5 minutes (300s) */
     if (now - last_broadcast >= 300000) {
         last_broadcast = now;
-        printk("Battery: Broadcasting status: %dmV, %d%%, %s\n", s_mv, s_pct, s_chg ? "charging" : "discharging");
-        
+        printk("Battery: Broadcast %dmV %d%% %s\n", s_mv, s_pct, s_chg?"chg":"disc");
         munin_packet_t pkt;
-        /* Use delta_s field to encode voltage (in 10mV units) and face_id for percentage + charging flag */
         uint32_t voltage_encoded = s_mv / 10;  /* Encode voltage in 10mV units */
-        uint8_t status_encoded = s_pct | (s_chg ? 0x80 : 0x00);  /* MSB = charging flag, 7 bits = percentage */
-        
-    /* TODO: Define dedicated battery status event; reuse ONGOING_LOG (0x02) as placeholder for now */
-    munin_protocol_create_packet(&pkt, MUNIN_EVENT_ONGOING_LOG, voltage_encoded, status_encoded);
+        uint8_t status_encoded = s_pct | (s_chg ? 0x80 : 0x00);  /* MSB = charging flag */
+        munin_protocol_create_packet(&pkt, MUNIN_EVENT_BATTERY_STATUS, voltage_encoded, status_encoded);
         munin_protocol_send_packet(&pkt);
     }
 
     /* Periodic battery status logging */
-    printk("Battery: %dmV, %d%%, %s\n", s_mv, s_pct, s_chg ? "charging" : "discharging");
+    MLOG("Battery: periodic %dmV %d%% %s\n", s_mv, s_pct, s_chg?"chg":"disc");
 }
 
 uint16_t munin_battery_get_voltage_mv(void) { return s_mv; }

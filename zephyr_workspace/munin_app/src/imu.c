@@ -5,6 +5,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/sensor.h>
 #include <math.h>
+#include "debug.h"
 
 /* Attempt to resolve the IMU device via compatible (preferred) falling back to node label. */
 #if DT_HAS_COMPAT_STATUS_OKAY(st_lsm6dsl)
@@ -18,7 +19,7 @@
 #define IMU_MIN_AXIS_G         0.55f    /* Minimum absolute g on dominant axis */
 #define IMU_AXIS_MARGIN_G      0.18f    /* Dominance margin over next axis */
 #define FACE_SETTLE_TIME_MS    1500     /* Require 1.5s stable before switching face */
-#define FACE_HYSTERESIS_EXTRA  0.05f    /* Additional margin once settled to switch again */
+/* Removed unused FACE_HYSTERESIS_EXTRA constant (simplified hysteresis logic) */
 
 static const struct device *accel;
 static uint8_t s_face;              /* Current accepted face */
@@ -52,22 +53,17 @@ static void imu_get_average(float *x, float *y, float *z)
 static uint8_t face_from_avg(float x, float y, float z)
 {
     float ax = fabsf(x), ay = fabsf(y), az = fabsf(z);
-    /* Determine top two */
-    float d1=ax; uint8_t a1=0; if (ay>d1){d1=ay;a1=1;} if (az>d1){d1=az;a1=2;}
-    float d2=-1.f;
-    if (a1!=0) d2 = ax > ay ? (a1==2? (ax>ay?ay:ax) : ay) : (a1==1? (ax>az?az:ax) : (ay>az?az:ay)); /* simplified margin source */
-    /* Simpler: compute ordered values */
-    float arr[3]={ax,ay,az};
-    /* find second largest */
-    float max1=0,max2=0; for(int i=0;i<3;i++){ if(arr[i]>max1){max2=max1;max1=arr[i];} else if(arr[i]>max2){max2=arr[i];} }
-    if (max1 < IMU_MIN_AXIS_G) return 0; /* Not enough gravity alignment */
-    if ((max1 - max2) < IMU_AXIS_MARGIN_G) return 0; /* Not dominant enough */
-
-    uint8_t face;
-    if (ax>ay && ax>az) face = (x > 0.f) ? 1 : 2;        /* +X / -X */
-    else if (ay>ax && ay>az) face = (y > 0.f) ? 3 : 4;    /* +Y / -Y */
-    else face = (z > 0.f) ? 5 : 6;                        /* +Z / -Z */
-    return face;
+    /* Find largest and second largest magnitudes */
+    float max1 = ax, max2 = -1.f; int idx = 0;
+    if (ay > max1) { max2 = max1; max1 = ay; idx = 1; } else { max2 = ay; }
+    if (az > max1) { max2 = max1; max1 = az; idx = 2; } else if (az > max2) { max2 = az; }
+    if (max1 < IMU_MIN_AXIS_G) return 0;
+    if ((max1 - max2) < IMU_AXIS_MARGIN_G) return 0;
+    switch (idx) {
+        case 0: return (x > 0.f) ? 1 : 2; /* X */
+        case 1: return (y > 0.f) ? 3 : 4; /* Y */
+        default: return (z > 0.f) ? 5 : 6; /* Z */
+    }
 }
 
 int munin_imu_init(void)
@@ -90,7 +86,7 @@ int munin_imu_init(void)
         return -1;
     }
 
-    printk("IMU: Device ready, configuring ODR & full-scale...\n");
+    printk("IMU: Device ready, configuring ODR...\n");
 
     /* Configure accelerometer: 104 Hz, +/- 2g (adjust if needed). */
     struct sensor_value odr = { .val1 = 104, .val2 = 0 };
@@ -108,13 +104,13 @@ int munin_imu_init(void)
     for (int attempt=0; attempt<5; attempt++) {
         ret = sensor_sample_fetch(accel);
         if (ret) {
-            printk("IMU: Sample fetch failed (attempt %d): %d\n", attempt, ret);
+        MLOG("IMU: Sample fetch failed (attempt %d): %d\n", attempt, ret);
             k_sleep(K_MSEC(20));
             continue;
         }
         ret = sensor_channel_get(accel, SENSOR_CHAN_ACCEL_XYZ, v);
         if (ret) {
-            printk("IMU: Channel get failed (attempt %d): %d\n", attempt, ret);
+        MLOG("IMU: Channel get failed (attempt %d): %d\n", attempt, ret);
             k_sleep(K_MSEC(20));
             continue;
         }
@@ -122,12 +118,12 @@ int munin_imu_init(void)
             got_nonzero = true;
             break;
         }
-        printk("IMU: Still zero readings (attempt %d) ...\n", attempt);
+    MLOG("IMU: Still zero readings (attempt %d) ...\n", attempt);
         k_sleep(K_MSEC(30));
     }
 
-    printk("IMU: Raw sensor values: [0]=%d.%06d [1]=%d.%06d [2]=%d.%06d (nonzero=%d)\n",
-           v[0].val1, v[0].val2, v[1].val1, v[1].val2, v[2].val1, v[2].val2, got_nonzero);
+    MLOG("IMU: Raw sensor values: [%d.%06d,%d.%06d,%d.%06d] nonzero=%d\n",
+          v[0].val1, v[0].val2, v[1].val1, v[1].val2, v[2].val1, v[2].val2, got_nonzero);
 
     float fx = sensor_value_to_double(&v[0]);
     float fy = sensor_value_to_double(&v[1]);
@@ -145,9 +141,9 @@ int munin_imu_init(void)
     int zmg = (int)(az * 1000.f);
     printk("IMU: Initial face=%d avg_mg: x=%d y=%d z=%d\n", s_face, xmg, ymg, zmg);
 
-    munin_packet_t pkt; // Boot event
+    munin_packet_t pkt; // Boot event (face encoded in face_id)
     munin_protocol_create_packet(&pkt, MUNIN_EVENT_BOOT, 0, s_face);
-    munin_protocol_send_packet(&pkt);
+    munin_protocol_send_packet(&pkt); /* Version packet sent later from main */
     return got_nonzero ? 0 : -2; /* Return -2 if still only zeros */
 }
 
@@ -164,7 +160,7 @@ void munin_imu_update(void)
     int ret = sensor_sample_fetch(accel);
     if (ret) {
         if (debug_counter % 50 == 0) {
-            printk("IMU: Sample fetch error: %d\n", ret);
+        MLOG("IMU: Sample fetch error: %d\n", ret);
         }
         debug_counter++;
         return;
@@ -172,7 +168,7 @@ void munin_imu_update(void)
     ret = sensor_channel_get(accel, SENSOR_CHAN_ACCEL_XYZ, v);
     if (ret) {
         if (debug_counter % 50 == 0) {
-            printk("IMU: Channel get error: %d\n", ret);
+        MLOG("IMU: Channel get error: %d\n", ret);
         }
         debug_counter++;
         return;
@@ -187,7 +183,7 @@ void munin_imu_update(void)
     uint8_t detected = face_from_avg(ax,ay,az);
     
     // Debug output every 5 seconds
-    if (debug_counter % 30 == 0) { /* Every ~5.4s (30 * 180ms) */
+    if (MUNIN_DEBUG && (debug_counter % 30 == 0)) { /* Every ~5.4s (30 * 180ms) */
         int xmg = (int)(ax * 1000.f);
         int ymg = (int)(ay * 1000.f);
         int zmg = (int)(az * 1000.f);
@@ -202,14 +198,14 @@ void munin_imu_update(void)
             if (detected != s_candidate) {
                 s_candidate = detected;
                 s_candidate_since = now;
-                printk("IMU: New candidate face: %d\n", detected);
+                MLOG("IMU: New candidate face: %d\n", detected);
             } else {
                 /* Check stability duration */
                 if ((now - s_candidate_since) >= FACE_SETTLE_TIME_MS) {
                     /* Extra hysteresis: ensure dominance still present with margin */
                     if (detected == face_from_avg(ax, ay, az)) {
                         uint32_t settle_ms = (uint32_t)(now - s_candidate_since);
-                        printk("IMU: Face settled: %d -> %d (%u ms)\n", s_face, s_candidate, settle_ms);
+                        printk("IMU: Face %d -> %d (%u ms)\n", s_face, s_candidate, settle_ms);
                         s_face = s_candidate;
                         s_session_start = now;
                         /* Increase margin slightly after switch to reduce oscillations */

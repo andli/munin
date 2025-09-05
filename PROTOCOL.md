@@ -35,6 +35,7 @@ Event types are represented as single-byte constants in the first field of the p
 | `0x02`       | Ongoing Log        | Time has elapsed on the same face                         |
 | `0x03`       | State Sync         | Connection state sync - device reports current face and accumulated time |
 | `0x04`       | Battery Status     | Battery voltage, percentage, and charging status update   |
+| `0x05`       | Version            | Firmware version announcement (sent once after boot)      |
 | `0x10`       | Boot               | Device powered on. Anchors device uptime. Will be rare.   |
 | `0x11`       | Shutdown           | Device is powering down (low battery or user-triggered)   |
 | `0x12`       | Low Battery        | Battery voltage below safe threshold                      |
@@ -72,6 +73,25 @@ Sent every 5 minutes to provide detailed battery information:
 **Example**: `{0x04, 372, 0x95}` = 3.72V, 21% battery, charging (0x95 = 149 = 21 + 128)
 
 This custom event provides higher precision voltage readings and timing information not available through the standard BLE service.
+
+#### Version Event (`0x05`)
+Sent once shortly after boot so the client can record the running firmware version. Encodes a semver in the 32-bit `delta_s` field and a build/revision tag in `face_id` if needed.
+
+Encoding (proposed):
+- `delta_s`: `(major << 16) | (minor << 8) | patch`
+- `face_id`: build metadata index (0 for release) — currently reserved / 0.
+
+Example: Firmware 1.2.3 => `delta_s = 0x00010203`.
+
+#### Charging / Battery Lifecycle Events
+| Event | Meaning |
+|-------|---------|
+| `0x12` Low Battery | Voltage below threshold (only first crossing per discharge cycle) |
+| `0x13` Charging Started | USB power detected, battery charging begins |
+| `0x14` Fully Charged | Reached full charge (voltage plateau) while charging |
+| `0x15` Charging Stopped | USB removed or charging ended before full |
+
+Low battery event should not be spammed; emit once until voltage rises above a clear hysteresis threshold (e.g. +100mV) before allowing another. Clients should treat multiple identical events within a short window as duplicates.
 
 ---
 

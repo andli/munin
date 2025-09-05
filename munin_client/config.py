@@ -1,5 +1,6 @@
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import Dict, Optional, Any
 from munin_client.logger import MuninLogger
@@ -95,14 +96,37 @@ class MuninConfig:
             logger.log_event("Updated config with missing face labels/colors")
     
     def save_config(self, config: Dict[str, Any]):
-        """Save configuration to file"""
+        """Save configuration atomically (never append / partial write).
+
+        Strategy:
+        1. Serialize JSON to a temp file in the same directory.
+        2. Flush + fsync to ensure bytes hit disk.
+        3. os.replace() to atomically swap into place.
+        This prevents duplicated JSON fragments or truncated files if the
+        process crashes mid-write.
+        """
         try:
-            with open(self.config_file, 'w') as f:
-                json.dump(config, f, indent=2)
+            self.config_dir.mkdir(exist_ok=True)
+            # Serialize first
+            data = json.dumps(config, indent=2)
+            # Write to temp file in same directory for atomic replace
+            with tempfile.NamedTemporaryFile('w', dir=self.config_dir, delete=False, prefix='config.', suffix='.tmp') as tmp:
+                tmp.write(data)
+                tmp.flush()
+                os.fsync(tmp.fileno())
+                temp_path = Path(tmp.name)
+            # Atomic replace
+            os.replace(temp_path, self.config_file)
             self._config = config
-            logger.log_event("Configuration saved")
+            logger.log_event("Configuration saved (atomic)")
         except Exception as e:
-            logger.log_event(f"Error saving config: {e}")
+            logger.log_event(f"Error saving config atomically: {e}")
+            # Best effort cleanup: remove temp if it still exists
+            try:
+                if 'temp_path' in locals() and temp_path.exists():
+                    temp_path.unlink()
+            except Exception:
+                pass
     
     def get_preferred_device(self) -> tuple[Optional[str], Optional[str]]:
         """Get preferred device name and MAC address"""

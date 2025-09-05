@@ -13,6 +13,23 @@
 #include "munin_protocol.h"
 #include "led_config.h"
 #include "led_effects.h"
+#include "debug.h"
+
+/* Firmware semantic version */
+#define MUNIN_FIRMWARE_VERSION_MAJOR 1
+#define MUNIN_FIRMWARE_VERSION_MINOR 0
+#define MUNIN_FIRMWARE_VERSION_PATCH 0
+
+static void munin_send_version_packet(void)
+{
+	munin_packet_t pkt;
+	uint32_t encoded = (MUNIN_FIRMWARE_VERSION_MAJOR << 16) |
+					   (MUNIN_FIRMWARE_VERSION_MINOR << 8)  |
+					   (MUNIN_FIRMWARE_VERSION_PATCH);
+	if (munin_protocol_create_packet(&pkt, MUNIN_EVENT_VERSION, encoded, 0) == 0) {
+		munin_protocol_send_packet(&pkt);
+	}
+}
 
 /* Use the red LED (led0) */
 #define LED0_NODE DT_ALIAS(led0)
@@ -72,8 +89,10 @@ int main(void)
 	if (munin_imu_init()) printk("IMU init failed\n");
 	if (munin_ble_init()) printk("BLE init failed\n");
 
+	/* Send version packet once BLE is up (client can log firmware version) */
+	munin_send_version_packet();
+
 	// Main loop
-	bool led = true;
 	int counter = 0;
 	while (1) {
 		uint8_t current_face = munin_imu_get_current_face();
@@ -82,9 +101,13 @@ int main(void)
 
 		munin_led_effects_update();
 
-		printk("tick %d face=%u color=%u,%u,%u batt=%u%% conn=%d adv=%d\n", counter++, current_face,
-			   c.r, c.g, c.b,
-			   munin_battery_get_percentage(), munin_ble_is_connected(), munin_ble_is_advertising());
+		/* Reduce console spam: only log every 20 iterations (~10s) when debug enabled */
+		if (MUNIN_DEBUG && (counter % 20 == 0)) {
+			printk("tick %d face=%u color=%u,%u,%u batt=%u%% conn=%d adv=%d\n", counter, current_face,
+			       c.r, c.g, c.b,
+			       munin_battery_get_percentage(), munin_ble_is_connected(), munin_ble_is_advertising());
+		}
+		counter++;
 
 		munin_battery_update();
 		munin_imu_update();

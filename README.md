@@ -124,13 +124,13 @@ Battery life is more important than detecting a face change quickly and moreover
 - ✅ Log face change to log file (CSV format as specified above) 
 - ✅ Handle device reconnection when connection is lost 
 - ✅ Test client app on Windows
+- ✅ Show current face in menu
 - Implement a Settings UI in system tray for:
   - LED colors
   - Face labels
   - preferred device selection/pairing
-- ✅ Show current face in menu
-- Make the tray menu update while it is open
 - Implement a basic view for time tracking statistics and reports
+- Make the tray menu update while it is open
 - Add firmware update menu item and function
 
 ## Munin device
