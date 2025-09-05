@@ -214,13 +214,26 @@ void munin_imu_update(void)
                         s_session_start = now;
                         /* Increase margin slightly after switch to reduce oscillations */
                         /* (We conceptually apply hysteresis by short-circuiting candidate resets below) */
-                        munin_packet_t pkt;
-                        munin_protocol_create_packet(&pkt, MUNIN_EVENT_FACE_SWITCH, 0, s_face);
-                        munin_protocol_send_packet(&pkt);
-                        munin_led_face_flash(s_face);
-                        /* Attempt BLE notify (ignore errors silently) */
+                        /*
+                         * Previous implementation sent BOTH a protocol face-switch packet
+                         * (over the generic TX characteristic) AND a dedicated face
+                         * notification via the face characteristic. The Python client then
+                         * processed both, causing duplicate logs and zero-length sessions
+                         * (Face changed: X -> X). To eliminate this, we now prefer to send
+                         * ONLY ONE update per actual face transition:
+                         *   1. Attempt BLE notification (if a client subscribed).
+                         *   2. If notify not possible (no connection / not subscribed),
+                         *      fall back to protocol packet so a later-connected client can
+                         *      still reconstruct history if needed.
+                         */
                         extern int munin_ble_notify_face(uint8_t face_id);
-                        (void)munin_ble_notify_face(s_face);
+                        int notif_ret = munin_ble_notify_face(s_face);
+                        if (notif_ret < 0) {
+                            munin_packet_t pkt;
+                            munin_protocol_create_packet(&pkt, MUNIN_EVENT_FACE_SWITCH, 0, s_face);
+                            munin_protocol_send_packet(&pkt);
+                        }
+                        munin_led_face_flash(s_face);
                     }
                 }
             }

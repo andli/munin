@@ -346,8 +346,9 @@ class RealMuninDevice(MuninDevice):
                     self.is_reconnecting = False
                     logger.log_event(f"Resumed session after reconnection: face {face_id}", "debug")
                 else:
-                    # This is a normal face change
-                    self.time_tracker.log_face_change(face_id)
+                    # Normal face change; suppress if duplicate
+                    if self.time_tracker.current_face != face_id:
+                        self.time_tracker.log_face_change(face_id)
                 
                 # Also log to regular logger
                 try:
@@ -358,7 +359,11 @@ class RealMuninDevice(MuninDevice):
                     face_label = f"Face {face_id}"
                 
                 if not was_reconnecting:  # Don't double-log during reconnection
-                    logger.log_face_change(face_id, face_label)
+                    if self.time_tracker.current_face == face_id and self.time_tracker.current_face_start_time is not None:
+                        # Only log transition if it was actually a change (time_tracker updated)
+                        pass
+                    else:
+                        logger.log_face_change(face_id, face_label)
             else:
                 logger.log_event(f"Received unknown notification format: {len(data)} bytes", "debug")
                 

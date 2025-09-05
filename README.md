@@ -154,3 +154,5 @@ Battery life is more important than detecting a face change quickly and moreover
 - Create proper installer/packaging for client app
 - Write a manual
 - Implement device firmware update mechanism
+
+

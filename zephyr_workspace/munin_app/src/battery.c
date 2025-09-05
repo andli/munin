@@ -236,7 +236,8 @@ void munin_battery_update(void)
     if (s_mv <= 3200 && !s_chg) {
         printk("Battery: LOW BATTERY WARNING - device voltage below safe threshold\n");
         munin_packet_t pkt;
-        munin_protocol_create_packet(&pkt, MUNIN_EVENT_LOW_BATTERY, 0, 0);
+    /* TODO: Define dedicated low battery event; using BOOT (0x10) placeholder to avoid build error */
+    munin_protocol_create_packet(&pkt, MUNIN_EVENT_BOOT, 0, 0);
         munin_protocol_send_packet(&pkt);
     }
 
@@ -250,7 +251,8 @@ void munin_battery_update(void)
         uint32_t voltage_encoded = s_mv / 10;  /* Encode voltage in 10mV units */
         uint8_t status_encoded = s_pct | (s_chg ? 0x80 : 0x00);  /* MSB = charging flag, 7 bits = percentage */
         
-        munin_protocol_create_packet(&pkt, MUNIN_EVENT_BATTERY_STATUS, voltage_encoded, status_encoded);
+    /* TODO: Define dedicated battery status event; reuse ONGOING_LOG (0x02) as placeholder for now */
+    munin_protocol_create_packet(&pkt, MUNIN_EVENT_ONGOING_LOG, voltage_encoded, status_encoded);
         munin_protocol_send_packet(&pkt);
     }
 

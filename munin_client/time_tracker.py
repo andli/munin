@@ -44,21 +44,25 @@ class TimeTracker:
                 logger.log_event(f"Error creating CSV file: {e}")
     
     def log_face_change(self, new_face_id: int):
-        """Log a face change event"""
+        """Track a face change (CSV + internal state) without emitting user INFO log."""
         current_time = datetime.now()
-        
-        # If we have a previous face, log the duration for that face
+
+        # Suppress duplicate same-face notifications
+        if self.current_face == new_face_id:
+            return
+
+        # Finalize previous face duration
         if self.current_face is not None and self.current_face_start_time is not None:
             duration = (current_time - self.current_face_start_time).total_seconds()
             self._write_csv_entry(self.current_face_start_time, self.current_face, duration)
-        
-        # Update current face tracking
+
+        # Start new face session
         self.current_face = new_face_id
         self.current_face_start_time = current_time
-        
-        # Log the face change event
+
+        # Debug only (avoid duplicate visible logs handled by MuninLogger.log_face_change)
         face_label = self.config.get_face_label(new_face_id)
-        logger.log_event(f"Face changed to {new_face_id} ({face_label})")
+        logger.log_event(f"Face tracker updated to {new_face_id} ({face_label})", "debug")
     
     def _write_csv_entry(self, timestamp: datetime, face_id: int, duration_s: float):
         """Write a single CSV entry"""
