@@ -4,6 +4,7 @@
 #include <zephyr/drivers/uart.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
+#include <zephyr/settings/settings.h>
 
 #include "ble.h"
 #include "imu.h"
@@ -17,11 +18,16 @@ static const struct gpio_dt_spec red_led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
 static void wait_for_dtr(const struct device *dev) {
 #ifdef CONFIG_UART_LINE_CTRL
 	uint32_t dtr = 0;
+	int timeout = 100; // 5 second timeout (100 * 50ms)
 	(void)uart_line_ctrl_set(dev, UART_LINE_CTRL_DTR, 1);
 	do {
 		(void)uart_line_ctrl_get(dev, UART_LINE_CTRL_DTR, &dtr);
 		k_msleep(50);
-	} while (!dtr);
+		timeout--;
+	} while (!dtr && timeout > 0);
+	if (timeout <= 0) {
+		printk("DTR timeout - continuing without terminal\n");
+	}
 #endif
 }
 
@@ -45,7 +51,16 @@ int main(void)
 	}
 	printk("Console ready. Initializing subsystems...\n");
 
-	// Init subsystems
+	// Init settings subsystem first (required for BLE persistent identity)
+	int settings_err = settings_subsys_init();
+	if (settings_err) {
+		printk("Settings subsystem init failed: %d\n", settings_err);
+	} else {
+		int load_ret = settings_load();
+		printk("Settings load result: %d\n", load_ret);
+	}
+
+	// Init other subsystems
 	if (munin_battery_init()) printk("Battery init failed\n");
 	if (munin_imu_init()) printk("IMU init failed\n");
 	if (munin_ble_init()) printk("BLE init failed\n");
@@ -67,8 +82,8 @@ int main(void)
 			gpio_pin_set_dt(&red_led, 1);
 		}
 		
-		printk("tick %d face=%u batt=%u%% conn=%d\n", counter++, current_face,
-			   munin_battery_get_percentage(), munin_ble_is_connected());
+		printk("tick %d face=%u batt=%u%% conn=%d adv=%d\n", counter++, current_face,
+			   munin_battery_get_percentage(), munin_ble_is_connected(), munin_ble_is_advertising());
 
 		munin_battery_update();
 		munin_imu_update();

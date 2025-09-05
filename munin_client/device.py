@@ -219,7 +219,7 @@ class RealMuninDevice(MuninDevice):
                         self.battery_level = int(battery_data[0])
                         return self.battery_level
             
-            logger.log_event("Real device does not have battery service")
+            logger.log_event("Device does not have battery service")
             return None
         except Exception as e:
             logger.log_event(f"Error reading battery from real device: {e}")

@@ -117,18 +117,21 @@ Deploy firmware:
 
 ## Client app
 
-- ~~Log face change to log file (CSV format as specified above)~~ ✅
-- ~~Handle device reconnection when connection is lost~~ ✅
+- ✅ ~~Log face change to log file (CSV format as specified above)~~ 
+- ✅ ~~Handle device reconnection when connection is lost~~ 
 - Implement a Settings UI in system tray for:
   - LED colors
   - Face labels
   - preferred device selection/pairing
-- ~~Test client app on Windows~~
+- ✅ ~~Test client app on Windows~~
 - Implement a basic view for time tracking statistics and reports
 - Add firmware update menu item and function
 
 ## Munin device
 
+- ✅ Get BLE working
+- Get battery level working
+- Get IMU sensor working
 - Broadcast face change only on movement
 - Broadcast battery level periodically
 - Receive LED configuration from client 
