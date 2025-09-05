@@ -130,14 +130,14 @@ Deploy firmware:
 ## Munin device
 
 - ✅ Get BLE working
+- ✅ Get IMU sensor working
+- Light up LED on face change 
+- Receive LED configuration from client 
 - Get battery level working
-- Get IMU sensor working
 - Broadcast face change only on movement
 - Broadcast battery level periodically
-- Receive LED configuration from client 
-- Light up LED on face change 
-- Implement real battery voltage reading (ADC) - when hardware is ready 
-- Add charging status detection - when hardware is ready 
+- Implement real battery voltage reading (ADC)
+- Add charging status detection 
 - Stronger LED than the builtin one needed - add a WS2812B NeoPixel
 - Add on/off button and reset button
 - Power saving mode - "sleep" and wake on movement
