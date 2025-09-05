@@ -129,6 +129,7 @@ Battery life is more important than detecting a face change quickly and moreover
   - Face labels
   - preferred device selection/pairing
 - ✅ Show current face in menu
+- Make the tray menu update while it is open
 - Implement a basic view for time tracking statistics and reports
 - Add firmware update menu item and function
 

@@ -79,32 +79,47 @@ static uint8_t voltage_to_percentage(uint16_t mv, bool is_charging)
 /* Read battery voltage via ADC using proven XIAO BLE Sense approach */
 static int read_battery_voltage(uint16_t *mv)
 {
-    int16_t buf;
+    const int num_samples = 8;  /* Average 8 readings for stability */
+    int32_t sum = 0;
+    
     struct adc_sequence sequence = {
         .channels = BIT(BATTERY_ADC_CHANNEL),
-        .buffer = &buf,
-        .buffer_size = sizeof(buf),
+        .buffer_size = sizeof(int16_t),
         .resolution = ADC_RESOLUTION,
     };
 
-    int ret = adc_read(adc_dev, &sequence);
-    if (ret < 0) {
-        printk("Battery: ADC read failed: %d\n", ret);
-        return ret;
+    /* Take multiple samples and average them */
+    for (int i = 0; i < num_samples; i++) {
+        int16_t buf;
+        sequence.buffer = &buf;
+        
+        int ret = adc_read(adc_dev, &sequence);
+        if (ret < 0) {
+            printk("Battery: ADC read failed: %d\n", ret);
+            return ret;
+        }
+        
+        sum += buf;
+        
+        /* Small delay between samples to reduce noise correlation */
+        k_msleep(2);
     }
-
+    
+    /* Calculate average */
+    int16_t avg_raw = sum / num_samples;
+    
     /* Direct empirical calibration based on your measurement
      * Your multimeter: 3.62V
      * Our ADC reading: ~260 raw → ~670mV calculated  
      * Calibration factor needed: 3620mV / 670mV = 5.4
      */
-    float vbat_raw = (float)buf / 4096.0 * 3.6 * 2.96;
+    float vbat_raw = (float)avg_raw / 4096.0 * 3.6 * 2.96;
     float vbat_calibrated = vbat_raw * 5.4;  /* Apply empirical correction */
     *mv = (uint16_t)(vbat_calibrated * 1000);  /* Convert to millivolts */
     
     /* Debug output to understand ADC readings */
-    printk("Battery: ADC raw=%d, uncalibrated=%dmV, calibrated=%dmV\n", 
-           (int)buf, (int)(vbat_raw * 1000), (int)*mv);
+    printk("Battery: ADC raw=%d (avg of %d), uncalibrated=%dmV, calibrated=%dmV\n", 
+           (int)avg_raw, num_samples, (int)(vbat_raw * 1000), (int)*mv);
 
     return 0;
 }
