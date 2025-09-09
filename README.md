@@ -145,9 +145,15 @@ Battery life is more important than detecting a face change quickly and moreover
 - Broadcast face change only on movement
 - Stronger LED than the builtin one needed - add an SK6812
 - Add firmware support for using the SK6812
+- LED support for low battery
 - Add on/off button and reset button
 - Power saving mode - "sleep" and wake on movement
 - Optimize BLE connection parameters for battery life
+
+## 3d print
+- Test print enclosure in PETG
+- Create mount points
+- Confirm snap-in lid
 
 ## Protocol & Infrastructure
 
