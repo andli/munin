@@ -29,11 +29,6 @@ The internal LED provides status feedback:
 - :rainbow: Face switch confirmation (short glow in configured color)
 - :red_square: Low battery (pulsing red)
 - :green_square: Charging (pulsing green) and fully charged (steady green)
-- :blue_square: Bluetooth pairing mode
-
-### Bluetooth pairing
-
-Pairing is triggered when the USB-C connector side is UP and USB is connected.
 
 ## Software
 
@@ -159,6 +154,7 @@ Battery life is more important than detecting a face change quickly and moreover
 
 - Create proper installer/packaging for client app
 - Write a manual
+- BLE initial pairing
 - Implement device firmware update mechanism
 
 
