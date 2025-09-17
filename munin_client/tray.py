@@ -8,6 +8,8 @@ from PIL import Image
 from munin_client.logger import MuninLogger
 from munin_client.config import MuninConfig
 from munin_client.ble_manager import BLEDeviceManager
+import sys
+import subprocess
 
 logger = MuninLogger()
 
@@ -74,6 +76,13 @@ async def ble_worker_async():
                     logger.log_event("Device connected successfully")
                     reconnect_attempts = 0
                     was_connected = True
+                # If there's a pending request to push face colors, do it now on the BLE loop
+                if getattr(ble_manager, '_pending_send_config', False):
+                    try:
+                        await ble_manager._send_face_configuration()
+                    finally:
+                        ble_manager._pending_send_config = False
+                        logger.log_event("Sent face color configuration to device (config reload)")
                 
                 # Check battery every 30 seconds
                 if battery_check_counter >= 30:
@@ -192,30 +201,12 @@ def start_tray(enable_fake_device: bool = False):
             logger.log_event(f"Monthly Activity Summary:\n{summary}")
 
     def show_settings(*args):
-        """Show settings configuration."""
-        from munin_client.config import MuninConfig
-        config = MuninConfig()
-        settings_info = [
-            "Current Settings:",
-            f"Monthly Start Date: {config.get_monthly_start_date()}",
-            f"Time Format: {config.get_activity_summary_config().get('time_format', 'hours')}",
-            "",
-            "Face Labels:"
-        ]
-        
-        for i in range(1, 7):
-            label = config.get_face_label(i)
-            color = config.get_face_color(i)
-            settings_info.append(f"  Face {i}: {label} - RGB({color['r']},{color['g']},{color['b']})")
-        
-        settings_text = "\n".join(settings_info)
-        
-        # Copy settings to clipboard
-        if copy_to_clipboard(settings_text):
-            logger.log_event("Settings copied to clipboard")
-        else:
-            logger.log_event("Failed to copy to clipboard - showing in log")
-            logger.log_event(settings_text)
+        """Launch external settings editor process (Tk on main thread)."""
+        try:
+            subprocess.Popen([sys.executable, '-m', 'munin_client.settings_editor'])
+            logger.log_event("Launched settings editor")
+        except Exception as e:
+            logger.log_event(f"Failed to launch settings editor: {e}")
 
 
 
@@ -345,14 +336,37 @@ def start_tray(enable_fake_device: bool = False):
     # Set initial menu
     icon.menu = create_menu()
     
-    # Schedule periodic menu updates
+    # Track config modification time for external changes (settings editor)
+    last_config_mtime = None
+    config_path = config.config_file
+
+    # Schedule periodic menu + config updates
     def menu_updater():
+        nonlocal last_config_mtime
         while not shutdown_event.is_set():
             try:
                 update_menu()
+                # Detect config changes
+                if config_path.exists():
+                    mtime = config_path.stat().st_mtime
+                    if last_config_mtime is None:
+                        last_config_mtime = mtime
+                    elif mtime != last_config_mtime:
+                        last_config_mtime = mtime
+                        # Reload config
+                        config._config = None  # force reload
+                        config.load_config()
+                        logger.log_event("Config reloaded (detected external change)")
+                        # Push colors if connected (schedule for BLE worker loop)
+                        try:
+                            if ble_manager.is_connected():
+                                ble_manager.send_face_colors_to_device()
+                                logger.log_event("Scheduled face color configuration push (config reload)")
+                        except Exception as e:
+                            logger.log_event(f"Failed sending colors after reload: {e}")
             except Exception as e:
-                logger.log_event(f"Error updating menu: {e}")
-            time.sleep(5)  # Update every 5 seconds
+                logger.log_event(f"Error in menu loop: {e}")
+            time.sleep(5)
     
     # Start menu updater in background
     menu_thread = threading.Thread(target=menu_updater, daemon=True)

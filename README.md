@@ -18,7 +18,7 @@ The device consists of a 3d printed translucent enclosure, a single board for co
 - 3D-printed translucent enclosure (STL to come)
 - Seeed XIAO nRF52840 Sense — BLE + IMU + USB-C microcontroller
 - LiPo battery (3.7 V, EEMB 803030 with PCM)
-- RGBW LED; SK6812 mini
+- SK6812 mini LED
 
 Total cost of components is something like 40€ at the moment. Could be lowered significantly but that would make assembly much more cumbersome.
 
@@ -67,7 +67,7 @@ munin_events.log # System, connection, and status events
 - Label and color for each side.
 - Time log file location
 
-Face colors can be configured in the `~/.munin/config.json` file. The client automatically sends the configured colors to the device when connecting. Each face has a default color:
+Face colors (and labels) can be configured via the tray Settings UI ("Settings…") or by editing `~/.munin/config.json` directly. The client automatically sends the configured colors to the device when connecting. Each face has a default color:
 
 - Face 1: Red (255,0,0)
 - Face 2: Green (0,255,0)
@@ -77,6 +77,16 @@ Face colors can be configured in the `~/.munin/config.json` file. The client aut
 - Face 6: Gray (128,128,128)
 
 The device will flash the configured color briefly when switching faces.
+
+### Settings UI
+
+Open from the tray icon → "Settings…". Features:
+
+- Edit face labels
+- Edit face colors (hex #RRGGBB)
+  
+
+Config writes are atomic; the running tray process detects external changes and pushes updates live without restart.
 
 ## Dev
 

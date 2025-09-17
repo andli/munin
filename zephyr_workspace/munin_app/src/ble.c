@@ -58,10 +58,25 @@ static ssize_t write_led(struct bt_conn *conn, const struct bt_gatt_attr *attr,
                          const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
 {
     ARG_UNUSED(conn); ARG_UNUSED(attr); ARG_UNUSED(flags);
-    if (offset != 0) return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
-    if (len == 4) {
-        /* TODO: parse face + RGB for LED control */
+    if (offset != 0) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
     }
+    if (len != 4) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    const uint8_t *p = (const uint8_t *)buf;
+    uint8_t face = p[0];
+    if (face < 1 || face > 6) {
+        return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+    }
+
+    /* Log receipt of face color configuration packet */
+    printk("cfg face=%u rgb=%u,%u,%u\n", face, p[1], p[2], p[3]);
+    extern void munin_led_set_face_color(uint8_t face, uint8_t r, uint8_t g, uint8_t b);
+    munin_led_set_face_color(face, p[1], p[2], p[3]);
+
+    /* Optional: brief confirmation flash could be triggered here, but we rely on next face change */
     return len;
 }
 

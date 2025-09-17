@@ -166,13 +166,13 @@ class MuninConfig:
         return config.get("face_colors", self.default_config["face_colors"])
     
     def get_face_color(self, face_number: int) -> Dict[str, int]:
-        """Get color for a specific face number"""
+        """Get color for a specific face number."""
         face_colors = self.get_face_colors()
-        default_color = {"r": 128, "g": 128, "b": 128}  # Gray default
+        default_color = {"r": 128, "g": 128, "b": 128}
         return face_colors.get(str(face_number), default_color)
     
     def set_face_color(self, face_number: str, r: int, g: int, b: int):
-        """Set color for a specific face"""
+        """Set color for a specific face."""
         config = self.load_config()
         if "face_colors" not in config:
             config["face_colors"] = {}

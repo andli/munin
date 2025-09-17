@@ -42,14 +42,14 @@ class MuninLogEntry:
 
 @dataclass
 class FaceConfig:
-    """Face color configuration"""
+    """Face color configuration."""
     face_id: int
     r: int
     g: int
     b: int
-    
+
     def to_packet(self) -> bytes:
-        """Convert to 4-byte configuration packet"""
+        """Return 4-byte packet <face,r,g,b>."""
         return struct.pack('<BBBB', self.face_id, self.r, self.g, self.b)
 
 class MuninDevice(ABC):
@@ -63,6 +63,8 @@ class MuninDevice(ABC):
         self.time_tracker = TimeTracker()  # Add time tracker
         self.is_reconnecting = False  # Track reconnection state
         self.ble_manager = ble_manager  # Reference to BLE manager for callbacks
+        # Protocol / feature flags
+        self.protocol_version: Optional[Tuple[int,int,int]] = None
         
         # Munin-specific service UUIDs (matching Arduino code)
         self.MUNIN_SERVICE_UUID = "6e400001-8a3a-11e5-8994-feff819cdc9f"
@@ -152,6 +154,14 @@ class MuninDevice(ABC):
             
         elif log_entry.event_type == 0x21:  # BLE disconnect event
             logger.log_event("BLE client disconnected")
+        
+        elif log_entry.event_type == 0x05:  # Version event
+            # Decode semver from delta_s: (major<<16 | minor<<8 | patch)
+            major = (log_entry.delta_s >> 16) & 0xFF
+            minor = (log_entry.delta_s >> 8) & 0xFF
+            patch = log_entry.delta_s & 0xFF
+            self.protocol_version = (major, minor, patch)
+            logger.log_event(f"Device firmware version: {major}.{minor}.{patch}")
             
         # TODO: Handle other event types if needed in the future
 
@@ -226,7 +236,7 @@ class MuninDeviceImpl(MuninDevice):
             return None
 
     async def send_face_config(self, face_configs: List[FaceConfig]) -> bool:
-        """Send face configuration to device"""
+        """Send face configuration to device."""
         try:
             if not self.is_connected():
                 return False

@@ -16,6 +16,8 @@ class BLEDeviceManager:
         self.battery_level: Optional[int] = None
         self.is_charging: bool = False
         self.battery_voltage: Optional[float] = None
+        # Internal flag used to request pushing face colors from non-async threads
+        self._pending_send_config: bool = False
         
         # Munin-specific UUIDs
         self.MUNIN_FACE_SERVICE_UUID = "6e400001-8a3a-11e5-8994-feff819cdc9f"
@@ -254,36 +256,47 @@ class BLEDeviceManager:
         return None
     
     async def send_face_config(self, face_configs):
-        """Send face configuration to connected device"""
+        """Send face configuration to connected device."""
         if not self.connected_device:
             return False
         return await self.connected_device.send_face_config(face_configs)
     
     async def _send_face_configuration(self):
-        """Send face color configuration from config to device"""
+        """Send face color configuration from config to device."""
         try:
-            # Import FaceConfig here to avoid circular imports
             from munin_client.device import FaceConfig
-            
+            if not self.connected_device:
+                return
             face_configs = []
             face_colors = self.config.get_face_colors()
-            
             for face_id_str, color in face_colors.items():
                 face_id = int(face_id_str)
+                # Debug log the exact color we'll send per face
+                try:
+                    hex_color = f"#{color['r']:02X}{color['g']:02X}{color['b']:02X}"
+                except Exception:
+                    hex_color = "#??????"
+                logger.log_event(
+                    f"Preparing face {face_id}: RGB({color['r']},{color['g']},{color['b']}) {hex_color}",
+                    "debug",
+                )
                 face_config = FaceConfig(
                     face_id=face_id,
                     r=color["r"],
                     g=color["g"],
-                    b=color["b"]
+                    b=color["b"],
                 )
                 face_configs.append(face_config)
-            
             if face_configs:
-                success = await self.send_face_config(face_configs)
+                success = await self.connected_device.send_face_config(face_configs)
                 if success:
-                    logger.log_event(f"Sent face color configuration to device ({len(face_configs)} faces)")
+                    logger.log_event(f"Sent RGB face configuration ({len(face_configs)} faces)")
                 else:
                     logger.log_event("Failed to send face color configuration to device")
-            
         except Exception as e:
             logger.log_event(f"Error sending face configuration: {e}")
+
+    # Called from non-async contexts (e.g., tray menu thread) to request a color push
+    def send_face_colors_to_device(self):
+        """Schedule sending face colors to the device from the BLE worker loop."""
+        self._pending_send_config = True
