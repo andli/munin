@@ -28,6 +28,19 @@ static bool ble_connected;
 static bool ble_advertising;
 static bool face_notif_enabled; /* client subscribed */
 
+/* Debounced confirmation sweep state */
+struct confirm_seq_state {
+    bool armed;          /* armed by recent writes */
+    bool active;         /* sequence currently running */
+    int64_t last_rx_ms;  /* time of last write */
+    uint8_t next_face;   /* next face in 1..6 */
+    int64_t step_ms;     /* time when current step started */
+    bool in_break;       /* true when in off pause */
+    bool preflash_done;  /* whether we already showed current face immediately */
+    uint8_t preflash_face; /* current face to show immediately, 0 to skip */
+};
+static struct confirm_seq_state s_cseq;
+
 /* Attribute index map (order produced by BT_GATT_SERVICE_DEFINE) */
 #define MUNIN_SVC_ATTR_PRIMARY     0
 #define MUNIN_SVC_ATTR_TX_DECL     1
@@ -76,7 +89,9 @@ static ssize_t write_led(struct bt_conn *conn, const struct bt_gatt_attr *attr,
     extern void munin_led_set_face_color(uint8_t face, uint8_t r, uint8_t g, uint8_t b);
     munin_led_set_face_color(face, p[1], p[2], p[3]);
 
-    /* Optional: brief confirmation flash could be triggered here, but we rely on next face change */
+    /* Arm a debounced confirmation sweep; will start after a short idle */
+    s_cseq.armed = true;
+    s_cseq.last_rx_ms = k_uptime_get();
     return len;
 }
 
@@ -88,7 +103,7 @@ static void face_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value
     
     /* When notifications are enabled, send current face after a short delay */
     if (face_notif_enabled && ble_connected && s_conn) {
-        /* We'll send the current face in munin_ble_update() or a separate function */
+        /* We'll send the current face in munin_ble_update() */
         printk("[BLE] Will send current face on next update\n");
     }
 }
@@ -134,6 +149,8 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
         s_conn = NULL;
     }
     ble_connected = false;
+    /* Cancel any pending confirmation sequence */
+    memset(&s_cseq, 0, sizeof(s_cseq));
 }
 
 BT_CONN_CB_DEFINE(conn_cbs) = {
@@ -151,7 +168,8 @@ static const struct bt_le_adv_param adv_params = BT_LE_ADV_PARAM_INIT(
     BT_LE_ADV_OPT_CONNECTABLE,
     BT_GAP_ADV_FAST_INT_MIN_2,
     BT_GAP_ADV_FAST_INT_MAX_2,
-    NULL);
+    NULL
+);
 
 int munin_ble_init(void)
 {
@@ -231,6 +249,76 @@ void munin_ble_update(void)
     /* Reset flag when notifications are disabled */
     if (!face_notif_enabled) {
         sent_initial_face = false;
+    }
+
+    /* Handle confirmation sweep sequencing */
+    const int64_t debounce_ms = 150; /* wait for batch to finish */
+    const uint16_t on_ms = 500;
+    const uint16_t off_ms = 500;
+    extern void munin_led_face_flash_ms(uint8_t face_id, uint16_t total_ms);
+
+    int64_t now = k_uptime_get();
+    if (!s_cseq.active) {
+        /* If armed and enough idle time passed, start sequence */
+        if (s_cseq.armed && (now - s_cseq.last_rx_ms) >= debounce_ms) {
+            s_cseq.active = true;
+            s_cseq.in_break = false;
+            s_cseq.preflash_done = false;
+            /* Snapshot the current face to show immediately */
+            extern uint8_t munin_imu_get_current_face(void);
+            s_cseq.preflash_face = munin_imu_get_current_face();
+            s_cseq.step_ms = now;
+            if (s_cseq.preflash_face > 0) {
+                /* Instantly reflect the new color on the current face */
+                munin_led_face_flash_ms(s_cseq.preflash_face, on_ms);
+            } else {
+                /* No current face known; skip preflash and start sweep at 1 */
+                s_cseq.preflash_done = true;
+                s_cseq.next_face = 1;
+                munin_led_face_flash_ms(s_cseq.next_face, on_ms);
+            }
+        }
+    } else {
+        if (!s_cseq.preflash_done) {
+            /* Handle preflash timing: ON then OFF */
+            if (!s_cseq.in_break) {
+                if ((now - s_cseq.step_ms) >= on_ms) {
+                    s_cseq.in_break = true;
+                    s_cseq.step_ms = now;
+                }
+            } else {
+                if ((now - s_cseq.step_ms) >= off_ms) {
+                    /* Preflash complete; begin 1->6 sweep */
+                    s_cseq.preflash_done = true;
+                    s_cseq.in_break = false;
+                    s_cseq.next_face = 1;
+                    s_cseq.step_ms = now;
+                    munin_led_face_flash_ms(s_cseq.next_face, on_ms);
+                }
+            }
+        } else {
+            if (!s_cseq.in_break) {
+                /* ON phase managed by led effects; when elapsed, start break */
+                if ((now - s_cseq.step_ms) >= on_ms) {
+                    s_cseq.in_break = true;
+                    s_cseq.step_ms = now;
+                }
+            } else {
+                /* Break phase; after off_ms, advance to next face or finish */
+                if ((now - s_cseq.step_ms) >= off_ms) {
+                    if (s_cseq.next_face < 6) {
+                        s_cseq.next_face++;
+                        s_cseq.in_break = false;
+                        s_cseq.step_ms = now;
+                        munin_led_face_flash_ms(s_cseq.next_face, on_ms);
+                    } else {
+                        /* Sequence complete */
+                        s_cseq.active = false;
+                        s_cseq.armed = false;
+                    }
+                }
+            }
+        }
     }
 }
 

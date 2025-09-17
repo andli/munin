@@ -63,7 +63,58 @@ class SettingsEditor:
         btn_frame = tk.Frame(self.root)
         btn_frame.grid(row=row, column=0, columnspan=6, pady=8)
         tk.Button(btn_frame, text="Save", command=self._save).pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_frame, text="Set all to color…", command=self._set_all_to_color).pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_frame, text="All Red", command=self._set_all_red).pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_frame, text="Reset to defaults", command=self._reset_to_defaults).pack(side=tk.LEFT, padx=12)
         tk.Button(btn_frame, text="Cancel", command=self._on_close).pack(side=tk.LEFT, padx=4)
+
+    def _reset_to_defaults(self):
+        """Reset all face labels and colors to defaults and save immediately (no prompts)."""
+
+        defaults_labels = self.config.default_config.get("face_labels", {})
+        defaults_colors = self.config.default_config.get("face_colors", {})
+        for face in range(1, 7):
+            # Labels
+            default_label = defaults_labels.get(str(face), f"Face {face}")
+            if face in self.label_vars:
+                self.label_vars[face].set(default_label)
+
+            # Colors
+            dc = defaults_colors.get(str(face), {"r": 128, "g": 128, "b": 128})
+            hex_color = f"#{dc['r']:02X}{dc['g']:02X}{dc['b']:02X}"
+            if face in self.color_vars:
+                self.color_vars[face].set(hex_color)
+
+        # Auto-save without closing
+        self._save_impl(close_window=False, quiet=True)
+
+    def _set_all_to_color(self):
+        """Pick a color once, apply to all faces, and save immediately (no prompts)."""
+        try:
+            _rgb_tuple, hex_color = colorchooser.askcolor(color="#FF0000", title="Pick color for all faces")
+            if not hex_color:
+                return
+            hex_color = hex_color.upper()
+            # Basic validation
+            if not (hex_color.startswith('#') and len(hex_color) == 7):
+                messagebox.showerror("Invalid Color", f"'{hex_color}' is not #RRGGBB")
+                return
+            for face in range(1, 7):
+                self.color_vars[face].set(hex_color)
+            # Auto-save without closing
+            self._save_impl(close_window=False, quiet=True)
+        except Exception as e:
+            logger.log_event(f"All-to-color picker error: {e}")
+
+    def _set_all_red(self):
+        """Quick action: set all faces to pure red and save immediately (no prompts)."""
+        try:
+            for face in range(1, 7):
+                self.color_vars[face].set("#FF0000")
+            # Auto-save without closing
+            self._save_impl(close_window=False, quiet=True)
+        except Exception as e:
+            logger.log_event(f"All-red apply error: {e}")
 
     def _pick_color(self, face: int):
         try:
@@ -94,6 +145,9 @@ class SettingsEditor:
             self.swatches[face].configure(bg=self.root.cget('bg'), text='')
 
     def _save(self):
+        self._save_impl(close_window=True, quiet=False)
+
+    def _save_impl(self, close_window: bool = True, quiet: bool = False):
         color_updates = 0
         label_updates = 0
 
@@ -109,12 +163,19 @@ class SettingsEditor:
                 )
                 return
 
+        # Prepare a single config update to minimize file writes
+        cfg = self.config.load_config().copy()
+        if "face_labels" not in cfg:
+            cfg["face_labels"] = {}
+        if "face_colors" not in cfg:
+            cfg["face_colors"] = {}
+
         for face, var in self.color_vars.items():
             # Labels
             label_val = self.label_vars[face].get().strip()
-            current_label = self.config.get_face_label(face)
+            current_label = cfg.get("face_labels", {}).get(str(face), self.config.get_face_label(face))
             if label_val != current_label:
-                self.config.set_face_label(str(face), label_val)
+                cfg["face_labels"][str(face)] = label_val
                 label_updates += 1
 
             # Colors
@@ -129,21 +190,27 @@ class SettingsEditor:
             except ValueError:
                 messagebox.showerror("Invalid Color", f"Face {face}: '{val}' parse error")
                 return
-            current = self.config.get_face_color(face)
+            current = cfg.get("face_colors", {}).get(str(face), self.config.get_face_color(face))
             if current['r'] != r or current['g'] != g or current['b'] != b:
-                self.config.set_face_color(str(face), r, g, b)
+                cfg["face_colors"][str(face)] = {"r": r, "g": g, "b": b}
                 color_updates += 1
 
+        # Save once if there were any updates
         if color_updates or label_updates:
-            if color_updates and label_updates:
-                logger.log_event(f"Updated {label_updates} label(s), {color_updates} color(s)")
-            elif label_updates:
-                logger.log_event(f"Updated {label_updates} label(s)")
+            self.config.save_config(cfg)
+
+        if not quiet:
+            if color_updates or label_updates:
+                if color_updates and label_updates:
+                    logger.log_event(f"Updated {label_updates} label(s), {color_updates} color(s)")
+                elif label_updates:
+                    logger.log_event(f"Updated {label_updates} label(s)")
+                else:
+                    logger.log_event(f"Updated {color_updates} color(s)")
             else:
-                logger.log_event(f"Updated {color_updates} color(s)")
-        else:
-            logger.log_event("No changes detected")
-        self._on_close()
+                logger.log_event("No changes detected")
+        if close_window:
+            self._on_close()
 
     def _on_close(self):
         self.root.destroy()

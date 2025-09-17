@@ -242,7 +242,16 @@ class MuninDeviceImpl(MuninDevice):
                 return False
             for config in face_configs:
                 packet = config.to_packet()
-                await self.client.write_gatt_char(self.MUNIN_LED_CONFIG_CHAR_UUID, packet)
+                # Log exact bytes for troubleshooting
+                try:
+                    logger.log_event(
+                        f"Writing LED packet: face={config.face_id} bytes={packet.hex()}")
+                except Exception:
+                    pass
+                # Use write with response to match firmware characteristic (WRITE only)
+                await self.client.write_gatt_char(self.MUNIN_LED_CONFIG_CHAR_UUID, packet, response=True)
+                # Optional small pacing to keep stacks happy
+                await asyncio.sleep(0.01)
             return True
         except Exception as e:
             logger.log_event(f"Error sending face config: {e}")

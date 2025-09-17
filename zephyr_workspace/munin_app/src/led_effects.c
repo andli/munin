@@ -34,6 +34,7 @@ static struct {
     uint8_t active;      /* 1 if a flash in progress */
     int64_t start_ms;    /* when flash started */
     uint8_t face;        /* face being flashed */
+    uint16_t total_ms;   /* total duration of flash */
 } s_flash;
 
 /* Flash durations */
@@ -108,10 +109,22 @@ void munin_led_face_flash(uint8_t face_id)
     s_flash.active = 1;
     s_flash.start_ms = k_uptime_get();
     s_flash.face = face_id;
+    s_flash.total_ms = FLASH_TOTAL_MS;
     
     /* Turn on the LED with face color */
     set_led_color(face_id, true);
     MLOG("LED: Set color face=%d\n", face_id);
+}
+
+void munin_led_face_flash_ms(uint8_t face_id, uint16_t total_ms)
+{
+    if (total_ms == 0) total_ms = 1; /* avoid zero */
+    MLOG("LED: Flash(ms) start face=%d dur=%u t=%lld\n", face_id, total_ms, k_uptime_get());
+    s_flash.active = 1;
+    s_flash.start_ms = k_uptime_get();
+    s_flash.face = face_id;
+    s_flash.total_ms = total_ms;
+    set_led_color(face_id, true);
 }
 
 void munin_led_effects_update(void)
@@ -121,7 +134,8 @@ void munin_led_effects_update(void)
     int64_t now = k_uptime_get();
     int64_t elapsed = now - s_flash.start_ms;
     
-    if (elapsed >= FLASH_TOTAL_MS) {
+    uint16_t dur = s_flash.total_ms ? s_flash.total_ms : FLASH_TOTAL_MS;
+    if (elapsed >= dur) {
         s_flash.active = 0;
         set_led_color(s_flash.face, false);  /* Turn OFF all LEDs */
     MLOG("LED: Flash end t=%lld dur=%lld\n", now, elapsed);
@@ -129,7 +143,7 @@ void munin_led_effects_update(void)
     }
     
     /* Simple pulse: on for first 60% then off */
-    if (elapsed < (FLASH_TOTAL_MS * 6 / 10)) {
+    if (elapsed < (dur * 6 / 10)) {
         set_led_color(s_flash.face, true);   /* Turn ON with face color */
     } else {
         set_led_color(s_flash.face, false);  /* Turn OFF */

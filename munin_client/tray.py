@@ -11,6 +11,14 @@ from munin_client.ble_manager import BLEDeviceManager
 import sys
 import subprocess
 
+# Optional: watchdog for low-latency file change detection
+try:
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler
+    HAS_WATCHDOG = True
+except Exception:
+    HAS_WATCHDOG = False
+
 logger = MuninLogger()
 
 # Global shutdown event
@@ -340,14 +348,73 @@ def start_tray(enable_fake_device: bool = False):
     last_config_mtime = None
     config_path = config.config_file
 
+    # If available, use watchdog to get immediate notifications on config changes
+    observer = None
+    if HAS_WATCHDOG:
+        class _ConfigChangeHandler(FileSystemEventHandler):
+            def __init__(self, target_path: str):
+                super().__init__()
+                self._target = os.path.realpath(target_path)
+
+            def _maybe_handle(self, event_path: str):
+                try:
+                    if os.path.realpath(event_path) == self._target:
+                        # Reload and schedule push
+                        try:
+                            config._config = None  # force reload
+                            config.load_config()
+                            logger.log_event("Config reloaded (watchdog change)")
+                            if ble_manager.is_connected():
+                                try:
+                                    ble_manager.refresh_config_from_disk()
+                                except Exception:
+                                    pass
+                                ble_manager.send_face_colors_to_device()
+                                logger.log_event("Scheduled face color configuration push (watchdog)")
+                        except Exception as e:
+                            logger.log_event(f"Failed handling config change: {e}")
+                except Exception:
+                    pass
+
+            def on_modified(self, event):
+                if not event.is_directory:
+                    self._maybe_handle(event.src_path)
+
+            def on_moved(self, event):
+                if not event.is_directory:
+                    # Atomic replace appears as a move into place on some platforms
+                    self._maybe_handle(event.dest_path)
+
+            def on_created(self, event):
+                if not event.is_directory:
+                    self._maybe_handle(event.src_path)
+
+    # Start watchdog observer if available
+    if HAS_WATCHDOG:
+        try:
+            observer = Observer()
+            handler = _ConfigChangeHandler(str(config_path))
+            observer.schedule(handler, path=str(config_path.parent), recursive=False)
+            observer.start()
+            logger.log_event("Watchdog started for config changes")
+        except Exception as e:
+            logger.log_event(f"Failed to start watchdog, falling back to polling: {e}")
+            observer = None
+
     # Schedule periodic menu + config updates
     def menu_updater():
         nonlocal last_config_mtime
+        last_menu_update = 0.0
         while not shutdown_event.is_set():
             try:
-                update_menu()
-                # Detect config changes
-                if config_path.exists():
+                now = time.time()
+                # Update menu at a relaxed cadence (every 5s)
+                if now - last_menu_update >= 5.0:
+                    update_menu()
+                    last_menu_update = now
+
+                # If watchdog isn't available, poll the config file at 0.5s cadence
+                if not HAS_WATCHDOG and config_path.exists():
                     mtime = config_path.stat().st_mtime
                     if last_config_mtime is None:
                         last_config_mtime = mtime
@@ -356,22 +423,36 @@ def start_tray(enable_fake_device: bool = False):
                         # Reload config
                         config._config = None  # force reload
                         config.load_config()
-                        logger.log_event("Config reloaded (detected external change)")
+                        logger.log_event("Config reloaded (poll)")
                         # Push colors if connected (schedule for BLE worker loop)
                         try:
                             if ble_manager.is_connected():
+                                try:
+                                    ble_manager.refresh_config_from_disk()
+                                except Exception:
+                                    pass
                                 ble_manager.send_face_colors_to_device()
-                                logger.log_event("Scheduled face color configuration push (config reload)")
+                                logger.log_event("Scheduled face color configuration push (poll)")
                         except Exception as e:
                             logger.log_event(f"Failed sending colors after reload: {e}")
             except Exception as e:
                 logger.log_event(f"Error in menu loop: {e}")
-            time.sleep(5)
+            # Tight loop only if watchdog missing; otherwise sleep a bit
+            time.sleep(0.5 if not HAS_WATCHDOG else 1.0)
     
     # Start menu updater in background
     menu_thread = threading.Thread(target=menu_updater, daemon=True)
     menu_thread.start()
 
     # Run the system tray (this blocks until quit)
-    icon.run()
+    try:
+        icon.run()
+    finally:
+        # Stop watchdog on exit
+        if observer is not None:
+            try:
+                observer.stop()
+                observer.join(timeout=3)
+            except Exception:
+                pass
     logger.log_event("Application exited")

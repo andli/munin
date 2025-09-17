@@ -11,27 +11,42 @@ logger = MuninLogger()
 class BLEDeviceManager:
     def __init__(self, enable_fake_device: bool = False):
         self.config = MuninConfig()
-        self.client: Optional[BleakClient] = None
-        self.connected_device: Optional[MuninDevice] = None
-        self.battery_level: Optional[int] = None
-        self.is_charging: bool = False
-        self.battery_voltage: Optional[float] = None
-        # Internal flag used to request pushing face colors from non-async threads
-        self._pending_send_config: bool = False
-        
+        self.client = None  # type: Optional[BleakClient]
+        self.connected_device = None  # type: Optional[MuninDevice]
+        self.battery_level = None  # type: Optional[int]
+        self.is_charging = False
+        self.battery_voltage = None  # type: Optional[float]
+        # Internal flags
+        self._pending_send_config = False
+        self._need_push_after_reconnect = False
+
         # Munin-specific UUIDs
         self.MUNIN_FACE_SERVICE_UUID = "6e400001-8a3a-11e5-8994-feff819cdc9f"
         self.MUNIN_FACE_CHAR_UUID = "6e400002-8a3a-11e5-8994-feff819cdc9f"
-        
+
         # Fake device support
-        self.fake_device: Optional[FakeMuninDevice] = None
+        self.fake_device = None  # type: Optional[FakeMuninDevice]
         if enable_fake_device:
             self.fake_device = FakeMuninDevice(ble_manager=self)
             logger.log_event("Fake Munin device enabled for testing")
-        
+
         # Standard BLE Battery Service UUID
         self.BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb"
         self.BATTERY_LEVEL_CHAR_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
+
+    def refresh_config_from_disk(self):
+        """Force reload of configuration from disk for this manager's instance.
+
+        Tray's global MuninConfig is a different instance; ensure our cached
+        copy is also refreshed so we don't send stale colors.
+        """
+        try:
+            # Bust cache and reload
+            self.config._config = None
+            self.config.load_config()
+            logger.log_event("BLE manager config refreshed from disk", "debug")
+        except Exception as e:
+            logger.log_event(f"Failed to refresh config from disk: {e}")
     
     async def scan_for_devices(self, timeout: float = 5.0) -> List[Tuple[str, str, str]]:
         """Scan for BLE devices and return list of (name, address, rssi) for Munin devices only"""
@@ -114,10 +129,7 @@ class BLEDeviceManager:
                 if await self.fake_device.connect():
                     self.connected_device = self.fake_device
                     self.battery_level = await self.fake_device.read_battery_level()
-                    
-                    # Send face configuration after successful connection
-                    await self._send_face_configuration()
-                    
+
                     return True
                 return False
             
@@ -134,10 +146,11 @@ class BLEDeviceManager:
                 if await real_munin.connect():
                     self.connected_device = real_munin
                     self.battery_level = await real_munin.read_battery_level()
-                    
-                    # Send face configuration after successful connection
-                    await self._send_face_configuration()
-                    
+                    # If a config push was requested while disconnected, do it now
+                    if self._need_push_after_reconnect:
+                        await self._send_face_configuration()
+                        self._need_push_after_reconnect = False
+
                     return True
                 else:
                     await self.client.disconnect()
@@ -267,9 +280,16 @@ class BLEDeviceManager:
             from munin_client.device import FaceConfig
             if not self.connected_device:
                 return
+            # Always reload from disk to avoid stale cached state
+            try:
+                self.config._config = None
+                self.config.load_config()
+            except Exception:
+                pass
             face_configs = []
             face_colors = self.config.get_face_colors()
-            for face_id_str, color in face_colors.items():
+            for face_id_str in sorted(face_colors.keys(), key=lambda x: int(x)):
+                color = face_colors[face_id_str]
                 face_id = int(face_id_str)
                 # Debug log the exact color we'll send per face
                 try:
@@ -293,6 +313,8 @@ class BLEDeviceManager:
                     logger.log_event(f"Sent RGB face configuration ({len(face_configs)} faces)")
                 else:
                     logger.log_event("Failed to send face color configuration to device")
+            else:
+                logger.log_event("No face colors found in config to send", "warning")
         except Exception as e:
             logger.log_event(f"Error sending face configuration: {e}")
 
@@ -300,3 +322,6 @@ class BLEDeviceManager:
     def send_face_colors_to_device(self):
         """Schedule sending face colors to the device from the BLE worker loop."""
         self._pending_send_config = True
+        # If we're currently not connected, remember to push immediately after reconnect
+        if not self.is_connected():
+            self._need_push_after_reconnect = True
