@@ -1,9 +1,13 @@
 #include "led_config.h"
 
-/* Runtime face colors initialized with defaults (match README defaults) */
+/* Runtime face colors initialized with defaults 
+ * NOTE: These are initial fallback values only. The actual colors come from 
+ * the client configuration via BLE. See munin_client/config.py for the 
+ * authoritative default values.
+ */
 static munin_rgb_t s_face_colors[6] = {
     {255,   0,   0}, // Face 1: Red
-    {  0, 255,   0}, // Face 2: Green
+    {  0, 255,   0}, // Face 2: Green  
     {  0,   0, 255}, // Face 3: Blue
     {255, 255,   0}, // Face 4: Yellow
     {255,   0, 255}, // Face 5: Magenta

@@ -38,28 +38,21 @@ The Munin time tracker has, besides its own firmware, a systray client app that 
 
 ### Log file format
 
-These are mockups of how the logs will look (probably).
-
 munin_time_log.csv # Primary tracked time
 
 ```
 timestamp,face_id,face_label,duration_s
-2025-08-01T10:00:44.957943,6,Emails,2
-2025-08-01T10:00:58.453851,1,Coding,6
-2025-08-01T10:01:24.482893,2,Emails,26
-2025-08-01T10:01:34.516895,5,Coding,8
-2025-08-01T10:02:16.564271,5,Meetings,22
-2025-08-01T10:10:32.221486,1,Software Development,0
-```
-
-munin_events.log # System, connection, and status events
-
-```
-2025-07-29T10:02:51Z BOOT reason=cold firmware=1.2.0
-2025-07-29T10:02:54Z BLE_CONNECTED peer=MacBook-Pro
-2025-07-29T10:44:00Z BATTERY_WARNING voltage=3.51V
-2025-07-29T10:50:12Z CHARGING_STARTED source=usb
-2025-07-29T10:55:33Z CHARGING_ENDED voltage=4.19V
+2025-08-20T15:59:15.847411,6,Off,8.0
+2025-08-20T15:59:23.875021,5,Break,4.0
+2025-08-20T15:59:27.901076,2,Coding,18.0
+2025-08-20T15:59:45.933763,3,Meetings,30.0
+2025-08-20T16:00:15.970091,2,Coding,2.0
+2025-08-21T15:51:53.807371,2,Coding,1332.3
+2025-08-21T16:14:06.146382,1,Emails,11.2
+2025-08-21T16:15:44.557220,1,Emails,10.0
+2025-08-21T16:35:39.860765,1,Emails,22.0
+2025-08-21T16:36:01.859839,2,Coding,4.1
+2025-08-21T22:15:41.733766,1,Emails,87.5
 ```
 
 ### Configuration
@@ -67,14 +60,9 @@ munin_events.log # System, connection, and status events
 - Label and color for each side.
 - Time log file location
 
-Face colors (and labels) can be configured via the tray Settings UI ("Settings…") or by editing `~/.munin/config.json` directly. The client automatically sends the configured colors to the device when connecting. Each face has a default color:
+Face colors (and labels) can be configured via the tray Settings UI ("Settings…") or by editing `~/.munin/config.json` directly. The client automatically sends the configured colors to the device when connecting.
 
-- Face 1: Red (255,0,0)
-- Face 2: Green (0,255,0)
-- Face 3: Blue (0,0,255)
-- Face 4: Yellow (255,255,0)
-- Face 5: Magenta (255,0,255)
-- Face 6: Gray (128,128,128)
+Each face can be customized with any color and label. See `config.example.json` for the default configuration values.
 
 The device will flash the configured color briefly when switching faces.
 
@@ -131,8 +119,8 @@ Battery life is more important than detecting a face change quickly and moreover
 - ✅ Test client app on Windows
 - ✅ Show current face in menu
 - Implement a Settings UI in system tray for:
-  - LED colors
-  - Face labels
+  - ✅ LED colors
+  - ✅ Face labels
   - preferred device selection/pairing
 - Implement a basic view for time tracking statistics and reports
 - Make the tray menu update while it is open
@@ -145,13 +133,13 @@ Battery life is more important than detecting a face change quickly and moreover
 - ✅ Light up LED on face change 
 - ✅ Implement real battery voltage reading (ADC)
 - ✅ Broadcast battery level periodically
+- ✅ Receive LED configuration from client 
+- ✅ Broadcast face change only on movement
+- ✅ Add on/off button and reset button
 - Add charging status detection and fix voltage being all wrong 
-- Receive LED configuration from client 
-- Broadcast face change only on movement
 - Stronger LED than the builtin one needed - add an SK6812
 - Add firmware support for using the SK6812
 - LED support for low battery
-- Add on/off button and reset button
 - Power saving mode - "sleep" and wake on movement
 - Optimize BLE connection parameters for battery life
 

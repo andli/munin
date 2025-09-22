@@ -11,6 +11,8 @@ class MuninConfig:
     def __init__(self):
         self.config_dir = Path.home() / ".munin"
         self.config_file = self.config_dir / "config.json"
+        # SINGLE SOURCE OF TRUTH for all default configuration values
+        # Changes here will propagate to new configs and reset operations
         self.default_config = {
             "preferred_device_name": None,
             "preferred_mac_address": None,
