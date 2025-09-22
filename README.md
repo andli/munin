@@ -38,7 +38,7 @@ The Munin time tracker has, besides its own firmware, a systray client app that 
 
 ### Log file format
 
-munin_time_log.csv # Primary tracked time
+`~/munin_time_log.csv`
 
 ```
 timestamp,face_id,face_label,duration_s
@@ -65,6 +65,15 @@ Face colors (and labels) can be configured via the tray Settings UI ("Settingsâ€
 Each face can be customized with any color and label. See `config.example.json` for the default configuration values.
 
 The device will flash the configured color briefly when switching faces.
+
+### Configuration Persistence
+
+**Client-side**: Your color preferences are saved in the client configuration file (`~/.munin/config.json`) and persist across client restarts.
+
+**Device-side**: The XIAO nRF52840 device stores color configurations in volatile RAM only. This means:
+- Color settings are sent from the client to the device each time they connect via Bluetooth
+- If the device is power-cycled or reset while disconnected from the client, it will revert to built-in default colors until the client reconnects and sends the current configuration
+- For normal usage where the client runs continuously, this provides seamless color persistence
 
 ### Settings UI
 
