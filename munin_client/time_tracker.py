@@ -7,6 +7,7 @@ in the README.md file.
 
 import csv
 import os
+import shutil
 from datetime import datetime
 from typing import Optional
 from munin_client.logger import MuninLogger
@@ -22,6 +23,7 @@ class TimeTracker:
         self.current_face: Optional[int] = None
         self.current_face_start_time: Optional[datetime] = None
         self.csv_file_path = self._get_csv_file_path()
+        self.last_log_month: Optional[str] = None  # Track last logged month for rollover
         
         # Ensure CSV file exists with headers
         self._initialize_csv_file()
@@ -42,6 +44,69 @@ class TimeTracker:
                 logger.log_event(f"Created new time log file: {self.csv_file_path}")
             except Exception as e:
                 logger.log_event(f"Error creating CSV file: {e}")
+        
+        # Determine the current month from existing log entries
+        self._update_last_log_month()
+    
+    def _update_last_log_month(self):
+        """Update the last_log_month by reading the most recent entry from the CSV"""
+        try:
+            if not os.path.exists(self.csv_file_path):
+                self.last_log_month = None
+                return
+            
+            with open(self.csv_file_path, 'r', newline='') as csvfile:
+                reader = csv.DictReader(csvfile)
+                last_entry = None
+                for row in reader:
+                    last_entry = row
+                
+                if last_entry:
+                    # Parse timestamp and extract YYYY-MM
+                    timestamp_str = last_entry['timestamp']
+                    timestamp = datetime.fromisoformat(timestamp_str)
+                    self.last_log_month = timestamp.strftime('%Y-%m')
+                else:
+                    self.last_log_month = None
+        except Exception as e:
+            logger.log_event(f"Error reading last log month: {e}")
+            self.last_log_month = None
+    
+    def _check_and_rollover_log(self, entry_timestamp: datetime):
+        """Check if we need to rollover the log for a new month"""
+        current_month = entry_timestamp.strftime('%Y-%m')
+        
+        # If this is the first entry ever, just update the tracking
+        if self.last_log_month is None:
+            self.last_log_month = current_month
+            return
+        
+        # If same month, no rollover needed
+        if self.last_log_month == current_month:
+            return
+        
+        # Different month - need to rollover
+        try:
+            home_dir = os.path.expanduser("~")
+            archive_filename = f"munin_time_log_{self.last_log_month}.csv"
+            archive_path = os.path.join(home_dir, archive_filename)
+            
+            # Move existing log to archived name
+            shutil.move(self.csv_file_path, archive_path)
+            logger.log_event(f"Archived time log to: {archive_filename}")
+            
+            # Create new log file with headers
+            with open(self.csv_file_path, 'w', newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(['timestamp', 'face_id', 'face_label', 'duration_s'])
+            logger.log_event(f"Created new time log file for {current_month}")
+            
+            # Update tracking
+            self.last_log_month = current_month
+            
+        except Exception as e:
+            logger.log_event(f"Error during log rollover: {e}")
+            # Continue with existing file if rollover fails
     
     def log_face_change(self, new_face_id: int):
         """Track a face change (CSV + internal state) without emitting user INFO log."""
@@ -67,6 +132,9 @@ class TimeTracker:
     def _write_csv_entry(self, timestamp: datetime, face_id: int, duration_s: float):
         """Write a single CSV entry"""
         try:
+            # Check if we need to rollover the log before writing
+            self._check_and_rollover_log(timestamp)
+            
             face_label = self.config.get_face_label(face_id)
             
             with open(self.csv_file_path, 'a', newline='') as csvfile:

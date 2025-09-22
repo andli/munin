@@ -22,3 +22,4 @@ void munin_led_set_face_color(uint8_t face, uint8_t r, uint8_t g, uint8_t b)
     s_face_colors[face - 1].g = g;
     s_face_colors[face - 1].b = b;
 }
+
