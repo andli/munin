@@ -1,33 +1,54 @@
 #include "led_effects.h"
 #include "led_config.h"
+#include "sk6812.h"
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
+
 #include <zephyr/device.h>
 #include "debug.h"
 
-/* The devicetree node identifiers for all RGB LEDs */
-#define LED0_NODE DT_ALIAS(led0)  /* Red LED */
-#define LED1_NODE DT_ALIAS(led1)  /* Green LED */
-#define LED2_NODE DT_ALIAS(led2)  /* Blue LED */
 
+
+#define LED0_NODE DT_ALIAS(led0)
+#define LED1_NODE DT_ALIAS(led1)
+#define LED2_NODE DT_ALIAS(led2)
 static const struct gpio_dt_spec led_red = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
 static const struct gpio_dt_spec led_green = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
 static const struct gpio_dt_spec led_blue = GPIO_DT_SPEC_GET(LED2_NODE, gpios);
+
+static led_target_t s_led_target = LED_TARGET_SK6812;
+
+void munin_led_set_target(led_target_t target) {
+    s_led_target = target;
+}
+
+led_target_t munin_led_get_target(void) {
+    return s_led_target;
+}
 
 /* Set RGB LED color based on face */
 static void set_led_color(uint8_t face_id, bool on)
 {
     const munin_rgb_t *colors = munin_led_get_face_colors();
-    munin_rgb_t color = {0, 0, 0}; /* Default off */
-    
+    munin_rgb_t color = {0, 0, 0};
     if (on && face_id >= 1 && face_id <= 6) {
         color = colors[face_id - 1];
     }
-    
-    /* Set each LED based on color values (on/off only) */
+    if (s_led_target == LED_TARGET_SK6812 && sk6812_is_ready()) {
+        sk6812_set_rgb(color.r, color.g, color.b);
+        gpio_pin_set_dt(&led_red, 0);
+        gpio_pin_set_dt(&led_green, 0);
+        gpio_pin_set_dt(&led_blue, 0);
+        return;
+    }
+
     gpio_pin_set_dt(&led_red, color.r > 0 ? 1 : 0);
     gpio_pin_set_dt(&led_green, color.g > 0 ? 1 : 0);
     gpio_pin_set_dt(&led_blue, color.b > 0 ? 1 : 0);
+
+    if (sk6812_is_ready()) {
+        sk6812_set_rgb(0, 0, 0);
+    }
 }
 
 static struct {
@@ -42,64 +63,29 @@ static struct {
 
 int munin_led_effects_init(void)
 {
-    printk("LED: Checking if RGB LEDs are ready...\n");
-    
-    /* Check all three LEDs */
-    if (!gpio_is_ready_dt(&led_red)) {
-        printk("LED: Red LED GPIO device not ready\n");
-        return -1;
+    s_led_target = LED_TARGET_SK6812;
+    sk6812_init();
+    if (!sk6812_is_ready()) {
+        printk("LED: SK6812 unavailable, using onboard RGB\n");
+        s_led_target = LED_TARGET_ONBOARD_RGB;
+    } else {
+        sk6812_set_rgb(0, 0, 0);
+        printk("LED: Using SK6812 on D6\n");
     }
-    if (!gpio_is_ready_dt(&led_green)) {
-        printk("LED: Green LED GPIO device not ready\n");
-        return -1;
+
+    int ret = 0;
+    if (!gpio_is_ready_dt(&led_red) || !gpio_is_ready_dt(&led_green) || !gpio_is_ready_dt(&led_blue)) {
+        printk("LED: Onboard RGB GPIO not ready\n");
+        // Don't fail, just warn
+    } else {
+        ret = gpio_pin_configure_dt(&led_red, GPIO_OUTPUT_INACTIVE);
+        ret |= gpio_pin_configure_dt(&led_green, GPIO_OUTPUT_INACTIVE);
+        ret |= gpio_pin_configure_dt(&led_blue, GPIO_OUTPUT_INACTIVE);
+        if (ret < 0) {
+            printk("LED: Failed to configure onboard RGB\n");
+        }
     }
-    if (!gpio_is_ready_dt(&led_blue)) {
-        printk("LED: Blue LED GPIO device not ready\n");
-        return -1;
-    }
-    
-    /* Configure all three LEDs */
-    int ret;
-    ret = gpio_pin_configure_dt(&led_red, GPIO_OUTPUT_ACTIVE);
-    if (ret < 0) {
-        printk("LED: Failed to configure Red LED GPIO: %d\n", ret);
-        return ret;
-    }
-    
-    ret = gpio_pin_configure_dt(&led_green, GPIO_OUTPUT_ACTIVE);
-    if (ret < 0) {
-        printk("LED: Failed to configure Green LED GPIO: %d\n", ret);
-        return ret;
-    }
-    
-    ret = gpio_pin_configure_dt(&led_blue, GPIO_OUTPUT_ACTIVE);
-    if (ret < 0) {
-        printk("LED: Failed to configure Blue LED GPIO: %d\n", ret);
-        return ret;
-    }
-    
-    printk("LED: Successfully configured all RGB LEDs\n");
-    
-    /* Test the RGB LEDs with a quick color sequence */
-    MLOG("LED: Testing RGB sequence...\n");
-    
-    /* Red */
-    set_led_color(1, true);  /* Face 1 = Red */
-    k_sleep(K_MSEC(300));
-    set_led_color(1, false);
-    
-    /* Green */
-    set_led_color(2, true);  /* Face 2 = Green */
-    k_sleep(K_MSEC(300));
-    set_led_color(2, false);
-    
-    /* Blue */
-    set_led_color(3, true);  /* Face 3 = Blue */
-    k_sleep(K_MSEC(300));
-    set_led_color(3, false);
-    
-    MLOG("LED: RGB test complete\n");
-    
+    printk("LED: target=%d (ready=%d)\n", s_led_target, sk6812_is_ready());
     return 0;
 }
 

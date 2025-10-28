@@ -1,3 +1,29 @@
+// Stub for missing function to allow build
+void wait_for_dtr(const struct device *dev) {
+	(void)dev;
+}
+
+// Stub for missing function to allow build
+static void munin_send_version_packet(void) {
+	/* No-op stub */
+}
+
+#include <zephyr/sys/util.h> // For ARG_UNUSED
+#include "led_effects.h"
+#include "led_config.h"
+#include "ble.h"
+#include "imu.h"
+#include "battery.h"
+#include "munin_protocol.h"
+#include "debug.h"
+
+// Prototypes for local functions
+static void munin_send_version_packet(void);
+
+
+#ifndef MUNIN_DEBUG
+#define MUNIN_DEBUG 0
+#endif
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/printk.h>
@@ -12,63 +38,21 @@
 #include "battery.h"
 #include "munin_protocol.h"
 #include "led_config.h"
-#include "led_effects.h"
-#include "debug.h"
-
-/* Firmware semantic version */
-#define MUNIN_FIRMWARE_VERSION_MAJOR 1
-#define MUNIN_FIRMWARE_VERSION_MINOR 0
-#define MUNIN_FIRMWARE_VERSION_PATCH 0
-
-static void munin_send_version_packet(void)
-{
-	munin_packet_t pkt;
-	uint32_t encoded = (MUNIN_FIRMWARE_VERSION_MAJOR << 16) |
-					   (MUNIN_FIRMWARE_VERSION_MINOR << 8)  |
-					   (MUNIN_FIRMWARE_VERSION_PATCH);
-	if (munin_protocol_create_packet(&pkt, MUNIN_EVENT_VERSION, encoded, 0) == 0) {
-		munin_protocol_send_packet(&pkt);
-	}
-}
-
-/* Use the red LED (led0) */
-#define LED0_NODE DT_ALIAS(led0)
-static const struct gpio_dt_spec red_led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
-
-static void wait_for_dtr(const struct device *dev) {
-#ifdef CONFIG_UART_LINE_CTRL
-	uint32_t dtr = 0;
-	int timeout = 100; // 5 second timeout (100 * 50ms)
-	(void)uart_line_ctrl_set(dev, UART_LINE_CTRL_DTR, 1);
-	do {
-		(void)uart_line_ctrl_get(dev, UART_LINE_CTRL_DTR, &dtr);
-		k_msleep(50);
-		timeout--;
-	} while (!dtr && timeout > 0);
-	if (timeout <= 0) {
-		printk("DTR timeout - continuing without terminal\n");
-	}
-#endif
-}
-
 int main(void)
 {
+	printk("=== Munin (Zephyr) BOOT ===\n");
 	const struct device *console = DEVICE_DT_GET_OR_NULL(DT_CHOSEN(zephyr_console));
 	int ret;
 
-	printk("*** Munin (Zephyr) starting on %s ***\n", CONFIG_BOARD);
 	printk("Console: %p\n", console);
 
-	if (!gpio_is_ready_dt(&red_led)) {
-		printk("LED not ready\n");
-	} else {
-		ret = gpio_pin_configure_dt(&red_led, GPIO_OUTPUT_ACTIVE);
-		if (ret) printk("Legacy LED configure failed: %d\n", ret);
-	}
-
+	// LED target selection is now handled in led_effects_init and can be changed at runtime
+	// Default is SK6812, fallback to onboard RGB if not present
 	if (munin_led_effects_init()) {
 		printk("LED effects init failed\n");
 	}
+
+	printk("Munin: after led_effects_init\n");
 
 	if (console && device_is_ready(console)) {
 		wait_for_dtr(console);
@@ -89,6 +73,8 @@ int main(void)
 	if (munin_imu_init()) printk("IMU init failed\n");
 	if (munin_ble_init()) printk("BLE init failed\n");
 
+	printk("Munin: after all subsystem init\n");
+
 	/* Send version packet once BLE is up (client can log firmware version) */
 	munin_send_version_packet();
 
@@ -104,8 +90,8 @@ int main(void)
 		/* Reduce console spam: only log every 20 iterations (~10s) when debug enabled */
 		if (MUNIN_DEBUG && (counter % 20 == 0)) {
 			printk("tick %d face=%u color=%u,%u,%u batt=%u%% conn=%d adv=%d\n", counter, current_face,
-			       c.r, c.g, c.b,
-			       munin_battery_get_percentage(), munin_ble_is_connected(), munin_ble_is_advertising());
+				   c.r, c.g, c.b,
+				   munin_battery_get_percentage(), munin_ble_is_connected(), munin_ble_is_advertising());
 		}
 		counter++;
 

@@ -18,7 +18,7 @@ The device consists of a 3d printed translucent enclosure, a single board for co
 - 3D-printed translucent enclosure (STL to come)
 - Seeed XIAO nRF52840 Sense — BLE + IMU + USB-C microcontroller
 - LiPo battery (3.7 V, EEMB 803030 with PCM)
-- SK6812 mini LED
+- SK6812 mini LED. Other LED drivers may be added in the future.
 
 Total cost of components is something like 40€ at the moment. Could be lowered significantly but that would make assembly much more cumbersome.
 
@@ -109,7 +109,7 @@ cd ./zephyr_workspace && source zephyr/zephyr-env.sh && cd munin_app && west bui
 
 Deploy firmware:
 1. Double-click reset button on XIAO to enter bootloader mode
-2. Run: `./flash.sh` (or drag `build/zephyr/zephyr.uf2` to XIAO-SENSE drive)
+2. From `./zephyr_workspace/munin_app`, Run: `./flash.sh` (or drag `build/zephyr/zephyr.uf2` to XIAO-SENSE drive)
 
 ### Zephyr info 
 
@@ -145,17 +145,17 @@ Battery life is more important than detecting a face change quickly and moreover
 - ✅ Receive LED configuration from client 
 - ✅ Broadcast face change only on movement
 - ✅ Add on/off button and reset button
+- ✅ Stronger LED than the builtin one needed - add an SK6812
+- ✅ Add firmware support for using the SK6812
 - Add charging status detection and fix voltage being all wrong 
-- Stronger LED than the builtin one needed - add an SK6812
-- Add firmware support for using the SK6812
 - LED support for low battery
 - Power saving mode - "sleep" and wake on movement
 - Optimize BLE connection parameters for battery life
 
 ## 3d print
-- Test print enclosure in PETG
-- Create mount points
-- Confirm snap-in lid
+- ✅ Test print enclosure in PETG
+- ✅ Create mount points
+- ✅ Confirm snap-in lid
 
 ## Protocol & Infrastructure
 
