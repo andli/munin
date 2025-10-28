@@ -4,7 +4,7 @@ import time
 import os
 import subprocess
 from pystray import Icon, MenuItem, Menu
-from PIL import Image
+from PIL import Image, ImageDraw
 from munin_client.logger import MuninLogger
 from munin_client.config import MuninConfig
 from munin_client.ble_manager import BLEDeviceManager
@@ -28,12 +28,24 @@ shutdown_event = threading.Event()
 ble_manager = None
 config = MuninConfig()
 
-def get_icon_image():
-    
-    # Define icon paths relative to the package
+def get_icon_images():
+    """Return tuple of (connected_icon, disconnected_icon)."""
     icon_dir = os.path.dirname(__file__)
     icon_path = os.path.join(icon_dir, "munin_tray_icon.png")
-    return Image.open(icon_path)
+
+    base_icon = Image.open(icon_path).convert("RGBA")
+    connected_icon = base_icon.copy()
+
+    # Build disconnected variant by overlaying a semi-transparent slash
+    disconnected_icon = base_icon.copy()
+    width, height = disconnected_icon.size
+    sample_color = base_icon.getpixel((width // 2, height // 2))
+    base_icon.close()
+    draw = ImageDraw.Draw(disconnected_icon)
+    stroke_width = max(1, width // 16)
+    slash_color = (*sample_color[:3], 220) if len(sample_color) == 4 else (*sample_color, 220)
+    draw.line((0, 0, width, height), fill=slash_color, width=stroke_width)
+    return connected_icon, disconnected_icon
 
 def copy_to_clipboard(text):
     """Copy text to system clipboard using pbcopy on macOS"""
@@ -323,9 +335,11 @@ def start_tray(enable_fake_device: bool = False):
         
         return Menu(*menu_items)
     
+    connected_icon, disconnected_icon = get_icon_images()
+
     icon = Icon(
         "Munin",
-        get_icon_image()
+        connected_icon if ble_manager.is_connected() else disconnected_icon
     )
     
     # Function to update the menu - try different methods
@@ -405,6 +419,7 @@ def start_tray(enable_fake_device: bool = False):
     def menu_updater():
         nonlocal last_config_mtime
         last_menu_update = 0.0
+        last_icon_state = None
         while not shutdown_event.is_set():
             try:
                 now = time.time()
@@ -412,6 +427,13 @@ def start_tray(enable_fake_device: bool = False):
                 if now - last_menu_update >= 5.0:
                     update_menu()
                     last_menu_update = now
+
+                current_connected = ble_manager.is_connected()
+                if current_connected != last_icon_state:
+                    icon.icon = connected_icon if current_connected else disconnected_icon
+                    if hasattr(icon, 'update_icon'):
+                        icon.update_icon()
+                    last_icon_state = current_connected
 
                 # If watchdog isn't available, poll the config file at 0.5s cadence
                 if not HAS_WATCHDOG and config_path.exists():

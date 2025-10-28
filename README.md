@@ -131,6 +131,7 @@ Battery life is more important than detecting a face change quickly and moreover
   - ✅ LED colors
   - ✅ Face labels
   - preferred device selection/pairing
+- Add systray icon for disconnected state
 - Implement a basic view for time tracking statistics and reports
 - Make the tray menu update while it is open
 - Add firmware update menu item and function
@@ -156,6 +157,7 @@ Battery life is more important than detecting a face change quickly and moreover
 - ✅ Test print enclosure in PETG
 - ✅ Create mount points
 - ✅ Confirm snap-in lid
+- Add a latch to lock the usb-c port in place
 
 ## Protocol & Infrastructure
 
